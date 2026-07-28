@@ -6,6 +6,8 @@ import os
 from config import ADMIN_PASSWORD
 from scoring import PlayerRoundResult, ROUND_TIME_LIMIT, score_round
 
+ROUNDS_PER_GAME = 10
+
 VALID_NUMBERS = {}
 try:
     with open(os.path.join(os.path.dirname(__file__), 'valid_numbers.json'), 'r') as f:
@@ -49,6 +51,9 @@ class GameState:
         self.last_round_scores = {}
         self.ready = {"enter": False, "shift": False, "mouse": False}
 
+        self.round_number = 0
+        self.round_history = []
+
     # --- transitions ---
 
     def set_difficulty(self, difficulty):
@@ -75,6 +80,12 @@ class GameState:
         self.p2_name = p2_name
         if self.mode == "3p":
             self.p3_name = p3_name
+
+        self.p1_score = 0.0
+        self.p2_score = 0.0
+        self.p3_score = 0.0
+        self.round_number = 1
+        self.round_history = []
 
         self._start_round()
 
@@ -125,9 +136,11 @@ class GameState:
         self.deadline_ts = None
 
         results = []
+        solve_times = {}
         for player_id, key in self._key_player_pairs():
             solved = self.clicks[key]
             solve_time = (self.press_times[key] - self.round_start_ts) if solved else None
+            solve_times[player_id] = solve_time
             results.append(PlayerRoundResult(player_id=player_id, solved=solved, solve_time=solve_time))
 
         scores = score_round(results)
@@ -138,6 +151,7 @@ class GameState:
             attr = f"{s.player_id}_score"
             setattr(self, attr, getattr(self, attr) + s.round_score)
             self.last_round_scores[s.player_id] = {
+                "solve_time": solve_times[s.player_id],
                 "solve_bonus": s.solve_bonus,
                 "speed_bonus": s.speed_bonus,
                 "rank_bonus": s.rank_bonus,
@@ -155,6 +169,12 @@ class GameState:
         self.ready = {"enter": False, "shift": False, "mouse": False}
         self.phase = "score"
 
+        self.round_history.append({
+            "round_number": self.round_number,
+            "number": self.number,
+            "scores": dict(self.last_round_scores),
+        })
+
     def score_ready(self, key):
         if self.phase != "score" or key not in self.ready:
             return
@@ -162,11 +182,20 @@ class GameState:
         self.ready[key] = True
 
         required = self._required_keys()
-        if all(self.ready[k] for k in required):
+        if not all(self.ready[k] for k in required):
+            return
+
+        if self.round_number >= ROUNDS_PER_GAME:
+            self.phase = "podium"
+        else:
+            self.round_number += 1
             self._start_round()
 
     def back_to_mode_select(self):
         self.mode = None
+        self.phase = "mode_select"
+        self.round_number = 0
+        self.round_history = []
         self.difficulty = None
         self.phase = "difficulty_select"
 
@@ -179,6 +208,14 @@ class GameState:
         if self.mode == "3p":
             self.p3_score = float(p3_score)
 
+    def _standings(self):
+        pairs = [("p1", self.p1_name, self.p1_score), ("p2", self.p2_name, self.p2_score)]
+        if self.mode == "3p":
+            pairs.append(("p3", self.p3_name, self.p3_score))
+
+        ordered = sorted(pairs, key=lambda pair: -pair[2])
+        return [{"player_id": pid, "name": name, "score": score} for pid, name, score in ordered]
+
     # --- serialization ---
 
     def to_dict(self):
@@ -187,12 +224,15 @@ class GameState:
             "mode": self.mode,
             "difficulty": self.difficulty,
             "round_time": ROUND_TIME_LIMIT,
+            "round_number": self.round_number,
+            "rounds_per_game": ROUNDS_PER_GAME,
             "p1_name": self.p1_name,
             "p2_name": self.p2_name,
             "p3_name": self.p3_name,
             "p1_score": self.p1_score,
             "p2_score": self.p2_score,
             "p3_score": self.p3_score,
+            "standings": self._standings(),
             "round": {
                 "number": self.number,
                 "started": self.round_started,
@@ -202,5 +242,6 @@ class GameState:
             "score_message": self.score_message,
             "last_number": self.last_number,
             "last_round_scores": dict(self.last_round_scores),
+            "round_history": list(self.round_history),
             "ready": dict(self.ready),
         }

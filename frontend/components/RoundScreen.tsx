@@ -3,6 +3,7 @@ import type { GameStateDTO } from "@/lib/api";
 interface Props {
   state: GameStateDTO;
   remainingSeconds: number | null;
+  onExit: () => void;
 }
 
 function Indicator({ label, active }: { label: string; active: boolean }) {
@@ -16,11 +17,19 @@ function Indicator({ label, active }: { label: string; active: boolean }) {
   );
 }
 
-export default function RoundScreen({ state, remainingSeconds }: Props) {
+export default function RoundScreen({ state, remainingSeconds, onExit }: Props) {
   const { round, mode } = state;
 
   return (
     <div className="relative flex flex-1 flex-col items-center px-8 pt-4">
+      <button
+        className="absolute left-6 top-5 rounded px-3 py-1 text-xs font-bold text-[var(--text-muted)]"
+        style={{ background: "var(--bg-card)" }}
+        onClick={onExit}
+      >
+        Exit
+      </button>
+
       <div className="absolute right-6 top-5 text-sm font-bold" style={{ color: "var(--color-gold)" }}>
         {state.round.started && remainingSeconds !== null ? `⏱ ${remainingSeconds}s` : ""}
       </div>

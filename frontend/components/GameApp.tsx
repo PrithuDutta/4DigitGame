@@ -135,10 +135,20 @@ export default function GameApp() {
               .then(setState)
               .catch((e: Error) => setNameError(e.message));
           }}
+          onExit={() => {
+            setNameError(null);
+            applyAction(() => postBackToModeSelect());
+          }}
         />
       )}
 
-      {state.phase === "round" && <RoundScreen state={state} remainingSeconds={remainingSeconds} />}
+      {state.phase === "round" && (
+        <RoundScreen
+          state={state}
+          remainingSeconds={remainingSeconds}
+          onExit={() => applyAction(() => postBackToModeSelect())}
+        />
+      )}
 
       {state.phase === "score" && (
         <ScoreScreen

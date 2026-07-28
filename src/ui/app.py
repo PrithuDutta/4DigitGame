@@ -131,9 +131,6 @@ class App:
             return
 
         if self.round_screen.winfo_ismapped():
-            if self.mode == "2p" and self.round_started:
-                return 
-            
             self.clicks["enter"] = True
             self.round_screen.agam_ind.config(fg="#10b981")
             self.start_timer()
@@ -145,9 +142,6 @@ class App:
             return
 
         if self.round_screen.winfo_ismapped():
-            if self.mode == "2p" and self.round_started:
-                return
-                
             self.clicks["shift"] = True
             self.round_screen.prithu_ind.config(fg="#10b981")
             self.start_timer()
@@ -178,9 +172,15 @@ class App:
             if self.mode == "3p":
                 if self.clicks["enter"] and self.clicks["shift"] and self.clicks["mouse"]:
                     self.finish_round()
+            elif self.mode == "2p":
+                if self.clicks["enter"] and self.clicks["shift"]:
+                    self.finish_round()
 
     def update_timer(self):
         if self.mode == "3p" and self.clicks["enter"] and self.clicks["shift"] and self.clicks["mouse"]:
+            self.finish_round()
+            return
+        elif self.mode == "2p" and self.clicks["enter"] and self.clicks["shift"]:
             self.finish_round()
             return
 

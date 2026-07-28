@@ -4,9 +4,10 @@ interface Props {
   state: GameStateDTO;
   onOpenAdmin: () => void;
   onChangeMode: () => void;
+  actionSlot?: React.ReactNode;
 }
 
-export default function ScoreScreen({ state, onOpenAdmin, onChangeMode }: Props) {
+export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSlot }: Props) {
   const enterStatus = state.ready.enter ? "✓ ENTER ready" : "Waiting for ENTER...";
   const shiftStatus = state.ready.shift ? "✓ SHIFT ready" : "Waiting for SHIFT...";
   const p3Status = state.ready.mouse
@@ -44,6 +45,8 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode }: Props)
         <p className="mt-4 mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
           Press ENTER, LMB, and SHIFT to continue
         </p>
+
+        {actionSlot && <div className="mb-3">{actionSlot}</div>}
 
         <div className="mt-2 flex gap-1">
           <button

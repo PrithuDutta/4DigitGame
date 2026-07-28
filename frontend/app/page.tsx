@@ -1,5 +1,5 @@
-import GameApp from "@/components/GameApp";
+import AppRoot from "@/components/AppRoot";
 
 export default function Home() {
-  return <GameApp />;
+  return <AppRoot />;
 }

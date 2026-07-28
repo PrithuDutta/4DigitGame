@@ -91,6 +91,18 @@ class Room(GameState):
         required = self._required_slots()
         return bool(required) and set(required) <= self._taken_slots()
 
+    def _begin_new_game(self):
+        # Mirrors what GameState.confirm_names() resets for local play —
+        # Room auto-starts the first round itself (players arrive one at a
+        # time via add_player, there's no single "everyone's named" call to
+        # hook), so it has to redo that reset here rather than inheriting it.
+        self.p1_score = 0.0
+        self.p2_score = 0.0
+        self.p3_score = 0.0
+        self.round_number = 1
+        self.round_history = []
+        self._start_round()
+
     def add_player(self, player_id, name, sid):
         name = (name or "").strip()
         if not name:
@@ -113,7 +125,7 @@ class Room(GameState):
         self.last_activity_ts = time.time()
 
         if not is_host_seat and self._seats_full():
-            self._start_round()
+            self._begin_new_game()
 
         return slot
 
@@ -145,12 +157,18 @@ class Room(GameState):
             raise NotHostError("Only the host can pick a mode.")
         self.set_mode(mode)
         if self._seats_full():
-            self._start_round()
+            self._begin_new_game()
 
     def back_to_mode_select_as_player(self, player_id):
         if player_id != self.host_player_id:
             raise NotHostError("Only the host can do that.")
         self.back_to_mode_select()
+        # GameState.back_to_mode_select() lands on "difficulty_select" — that
+        # phase has no online lobby screen (online games skip difficulty
+        # picking entirely, always drawing from the combined easy+hard
+        # pool), so jump straight to "mode_select" instead.
+        if self.phase == "difficulty_select":
+            self.phase = "mode_select"
 
     # --- player actions ---
 

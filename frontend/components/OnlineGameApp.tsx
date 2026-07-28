@@ -25,6 +25,7 @@ import type { Mode, RoomStateDTO, SessionDTO } from "@/lib/types";
 import LobbyScreen from "./LobbyScreen";
 import RoundScreen from "./RoundScreen";
 import ScoreScreen from "./ScoreScreen";
+import Podium from "./Podium";
 import AdminDialog from "./AdminDialog";
 import PressButton from "./PressButton";
 
@@ -210,6 +211,10 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
           onChangeMode={() => backToModeSelect()}
           actionSlot={<PressButton label="READY" onPress={scoreReady} disabled={alreadyReady} />}
         />
+      )}
+
+      {roomState.phase === "podium" && (
+        <Podium state={roomState} onPlayAgain={() => backToModeSelect()} />
       )}
 
       {adminOpen && (

@@ -41,6 +41,8 @@ class App:
         self.p3_ready = False
         self.score_message = ""
         self.last_number = ""
+        
+        self.transitioning = False
 
         # Initialize screens
         self.mode_screen = ModeScreen(self.root, self)
@@ -86,11 +88,13 @@ class App:
         self.show_round()
 
     def show_round(self):
+        self.transitioning = False
         self.score_screen.pack_forget()
         self.mode_screen.pack_forget()
         self.name_screen.pack_forget()
 
         self.round_screen.pack(fill="both", expand=True)
+        self.root.update_idletasks()
 
         self.round_started = False
         self.timer = ROUND_TIME
@@ -259,6 +263,9 @@ class App:
                 self.show_score("ROUND NULL (No Points)")
 
     def check_next_round(self):
+        if self.transitioning:
+            return
+            
         if self.mode == "3p":
             self.update_score_screen_display()
             if self.enter_ready and self.shift_ready and self.p3_ready:
@@ -266,4 +273,5 @@ class App:
         else:
             self.update_score_screen_display()
             if self.enter_ready and self.shift_ready:
+                self.transitioning = True
                 self.root.after(500, self.show_round)

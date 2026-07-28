@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 import threading
 
 from flask import Flask, jsonify, request
@@ -6,12 +9,17 @@ from flask_cors import CORS
 from config import (
     BG_DARK, BG_CARD, ACCENT_BLUE, ACCENT_BLUE_HOVER,
     TEXT_MAIN, TEXT_MUTED, TEXT_DIM, COLOR_GOLD, COLOR_ERROR, COLOR_SUCCESS,
+    FRONTEND_ORIGINS,
 )
+from extensions import socketio
 from game_state import GameState
 from scoring import ROUND_TIME_LIMIT
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=FRONTEND_ORIGINS)
+socketio.init_app(app)
+
+import sockets  # noqa: E402 — side-effect import, registers @socketio.on handlers
 
 state = GameState()
 lock = threading.Lock()
@@ -142,4 +150,26 @@ def post_admin_scores():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    import os
+
+    # socketio.run() starts eventlet's own WSGI server directly — this is
+    # the standard way to serve a small Flask-SocketIO app in production
+    # too, not just for local dev. Gunicorn's `--worker-class eventlet`
+    # looks equivalent but recent gunicorn releases dropped that worker
+    # plugin's entry point entirely, so it fails at startup; running
+    # eventlet's server directly here sidesteps that gap completely.
+    #
+    # PORT is set by the hosting platform (e.g. Render) in production;
+    # locally it falls back to 5000. FLASK_DEBUG defaults on for local dev
+    # convenience — it must be explicitly turned off in production, since
+    # Flask's debug mode exposes an interactive Python debugger to anyone
+    # who can trigger a server error, which is a serious security hole on
+    # a publicly reachable deployment.
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "1") == "1"
+
+    # use_reloader=False: Werkzeug's file-watching auto-restart doesn't mix
+    # reliably with eventlet's async WSGI server (the reloader's background
+    # thread can starve eventlet's greenthread scheduler and hang all I/O).
+    # You need to manually restart after editing backend files locally.
+    socketio.run(app, host="0.0.0.0", port=port, debug=debug, use_reloader=False)

@@ -1,3 +1,5 @@
+import os
+
 BG_DARK = "#0d0d12"
 BG_CARD = "#16161f"
 ACCENT_BLUE = "#4f46e5"
@@ -10,3 +12,5 @@ COLOR_ERROR = "#f87171"
 COLOR_SUCCESS = "#10b981"
 
 ADMIN_PASSWORD = "pqclarp"
+
+FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000").split(",")

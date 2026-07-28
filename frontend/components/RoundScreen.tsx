@@ -4,6 +4,7 @@ interface Props {
   state: GameStateDTO;
   remainingSeconds: number | null;
   onExit: () => void;
+  actionSlot?: React.ReactNode;
 }
 
 function Indicator({ label, active }: { label: string; active: boolean }) {
@@ -17,7 +18,7 @@ function Indicator({ label, active }: { label: string; active: boolean }) {
   );
 }
 
-export default function RoundScreen({ state, remainingSeconds, onExit }: Props) {
+export default function RoundScreen({ state, remainingSeconds, onExit, actionSlot }: Props) {
   const { round, mode } = state;
 
   return (
@@ -57,6 +58,8 @@ export default function RoundScreen({ state, remainingSeconds, onExit }: Props) 
         <Indicator label={`${state.p2_name} [SHIFT]`} active={round.clicks.shift} />
         {mode === "3p" && <Indicator label={`${state.p3_name} [LMB]`} active={round.clicks.mouse} />}
       </div>
+
+      {actionSlot && <div className="mt-6">{actionSlot}</div>}
     </div>
   );
 }

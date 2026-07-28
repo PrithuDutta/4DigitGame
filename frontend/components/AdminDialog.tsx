@@ -8,9 +8,17 @@ interface Props {
   state: GameStateDTO;
   onClose: () => void;
   onScoresUpdated: (next: GameStateDTO) => void;
+  onLogin?: (password: string) => Promise<{ ok: boolean }>;
+  onSubmitScores?: (p1: number, p2: number, p3: number) => Promise<GameStateDTO>;
 }
 
-export default function AdminDialog({ state, onClose, onScoresUpdated }: Props) {
+export default function AdminDialog({
+  state,
+  onClose,
+  onScoresUpdated,
+  onLogin = postAdminLogin,
+  onSubmitScores = postAdminScores,
+}: Props) {
   const [stage, setStage] = useState<"login" | "edit">("login");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +28,7 @@ export default function AdminDialog({ state, onClose, onScoresUpdated }: Props) 
   const [p3, setP3] = useState(state.p3_score.toFixed(1));
 
   const attemptLogin = async () => {
-    const { ok } = await postAdminLogin(password);
+    const { ok } = await onLogin(password);
     if (ok) {
       setError("");
       setStage("edit");
@@ -36,7 +44,7 @@ export default function AdminDialog({ state, onClose, onScoresUpdated }: Props) 
       setError("Scores must be numbers.");
       return;
     }
-    const next = await postAdminScores(Number(p1), Number(p2), Number(p3));
+    const next = await onSubmitScores(Number(p1), Number(p2), Number(p3));
     onScoresUpdated(next);
     onClose();
   };

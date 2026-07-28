@@ -35,6 +35,9 @@ export default function RoundScreen({ state, remainingSeconds, onExit }: Props) 
       </div>
 
       <p className="mt-9 mb-1 text-xs font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
+        ROUND {state.round_number} / {state.rounds_per_game}
+      </p>
+      <p className="mb-1 text-xs font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
         RANDOM NUMBER
       </p>
 

@@ -1,20 +1,35 @@
 import secrets
 import time
+import json
+import os
 
 from config import ADMIN_PASSWORD
 from scoring import PlayerRoundResult, ROUND_TIME_LIMIT, score_round
 
 ROUNDS_PER_GAME = 10
 
+VALID_NUMBERS = {}
+try:
+    with open(os.path.join(os.path.dirname(__file__), 'valid_numbers.json'), 'r') as f:
+        VALID_NUMBERS = json.load(f)
+except Exception as e:
+    print("Warning: Could not load valid_numbers.json:", e)
 
-def generate_4digit_number():
-    return str(secrets.randbelow(10000)).zfill(4)
+def generate_4digit_number(difficulty):
+    if difficulty == "easy" and "easy" in VALID_NUMBERS and VALID_NUMBERS["easy"]:
+        pool = VALID_NUMBERS["easy"]
+    elif "easy" in VALID_NUMBERS and "hard" in VALID_NUMBERS:
+        pool = VALID_NUMBERS["easy"] + VALID_NUMBERS["hard"]
+    else:
+        return str(secrets.randbelow(10000)).zfill(4)
+    return secrets.choice(pool)
 
 
 class GameState:
     def __init__(self):
         self.mode = None
-        self.phase = "mode_select"
+        self.difficulty = None
+        self.phase = "difficulty_select"
 
         self.p1_name = "Player 1"
         self.p2_name = "Player 2"
@@ -40,6 +55,12 @@ class GameState:
         self.round_history = []
 
     # --- transitions ---
+
+    def set_difficulty(self, difficulty):
+        if difficulty not in ("easy", "hard"):
+            raise ValueError("difficulty must be 'easy' or 'hard'")
+        self.difficulty = difficulty
+        self.phase = "mode_select"
 
     def set_mode(self, mode):
         if mode not in ("2p", "3p"):
@@ -70,7 +91,7 @@ class GameState:
 
     def _start_round(self):
         self.phase = "round"
-        self.number = generate_4digit_number()
+        self.number = generate_4digit_number(self.difficulty)
         self.clicks = {"enter": False, "shift": False, "mouse": False}
         self.press_times = {"enter": None, "shift": None, "mouse": None}
 
@@ -84,7 +105,7 @@ class GameState:
 
     def new_number(self):
         if self.phase == "round" and not any(self.clicks.values()):
-            self.number = generate_4digit_number()
+            self.number = generate_4digit_number(self.difficulty)
 
     def press(self, key):
         if self.phase != "round" or key not in self.clicks or self.clicks[key]:
@@ -175,6 +196,8 @@ class GameState:
         self.phase = "mode_select"
         self.round_number = 0
         self.round_history = []
+        self.difficulty = None
+        self.phase = "difficulty_select"
 
     def admin_login(self, password):
         return password == ADMIN_PASSWORD
@@ -199,6 +222,7 @@ class GameState:
         return {
             "phase": self.phase,
             "mode": self.mode,
+            "difficulty": self.difficulty,
             "round_time": ROUND_TIME_LIMIT,
             "round_number": self.round_number,
             "rounds_per_game": ROUNDS_PER_GAME,

@@ -5,6 +5,7 @@ import type { GameStateDTO } from "@/lib/api";
 import {
   getState,
   postBackToModeSelect,
+  postDifficulty,
   postMode,
   postNames,
   postNewNumber,
@@ -12,6 +13,7 @@ import {
   postScoreReady,
   postTimeout,
 } from "@/lib/api";
+import DifficultyScreen from "./DifficultyScreen";
 import ModeScreen from "./ModeScreen";
 import NameScreen from "./NameScreen";
 import RoundScreen from "./RoundScreen";
@@ -119,6 +121,10 @@ export default function GameApp() {
 
   return (
     <div className="flex min-h-screen flex-1 flex-col">
+      {state.phase === "difficulty_select" && (
+        <DifficultyScreen onSelect={(diff) => applyAction(() => postDifficulty(diff))} />
+      )}
+
       {state.phase === "mode_select" && (
         <ModeScreen onSelect={(mode) => applyAction(() => postMode(mode))} />
       )}

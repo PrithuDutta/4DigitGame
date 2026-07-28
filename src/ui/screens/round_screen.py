@@ -49,28 +49,28 @@ class RoundScreen(tk.Frame):
         self.indicators_frame = tk.Frame(self, bg=BG_DARK)
         self.indicators_frame.pack(pady=10)
 
-        self.agam_ind = tk.Label(self.indicators_frame, text="Agam [ENTER]", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
-        self.agam_ind.grid(row=0, column=0, padx=5)
+        self.p1_ind = tk.Label(self.indicators_frame, text="", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.p1_ind.grid(row=0, column=0, padx=5)
 
-        self.prithu_ind = tk.Label(self.indicators_frame, text="Prithu [SHIFT]", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
-        self.prithu_ind.grid(row=0, column=1, padx=5)
+        self.p2_ind = tk.Label(self.indicators_frame, text="", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.p2_ind.grid(row=0, column=1, padx=5)
 
-        self.ritvik_ind = tk.Label(self.indicators_frame, text="Ritvik [LMB]", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
-        self.ritvik_ind.grid(row=0, column=2, padx=5)
+        self.p3_ind = tk.Label(self.indicators_frame, text="", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.p3_ind.grid(row=0, column=2, padx=5)
 
     def reset_ui(self, mode):
         self.timer_label.config(text="")
         self.status.config(text="Press SPACE for new number")
         self.number.config(text=generate_4digit_number())
 
-        self.agam_ind.config(fg=TEXT_MUTED)
-        self.prithu_ind.config(fg=TEXT_MUTED)
-        
+        self.p1_ind.config(text=f"{self.controller.p1_name} [ENTER]", fg=TEXT_MUTED)
+        self.p2_ind.config(text=f"{self.controller.p2_name} [SHIFT]", fg=TEXT_MUTED)
+
         if mode == "3p":
-            self.ritvik_ind.grid(row=0, column=2, padx=5)
-            self.ritvik_ind.config(fg=TEXT_MUTED)
+            self.p3_ind.grid(row=0, column=2, padx=5)
+            self.p3_ind.config(text=f"{self.controller.p3_name} [LMB]", fg=TEXT_MUTED)
         else:
-            self.ritvik_ind.grid_forget()
+            self.p3_ind.grid_forget()
 
     def update_timer(self, timer_val):
         self.timer_label.config(text=f"⏱ {timer_val}s")

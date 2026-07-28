@@ -19,7 +19,7 @@ class ModeScreen(tk.Frame):
 
         btn_2p = tk.Button(
             inner,
-            text="2 Players (Agam & Prithu)",
+            text="2 Players",
             font=("Segoe UI", 10, "bold"),
             bg=ACCENT_BLUE,
             fg="white",
@@ -35,7 +35,7 @@ class ModeScreen(tk.Frame):
 
         btn_3p = tk.Button(
             inner,
-            text="3 Players (+ Ritvik)",
+            text="3 Players",
             font=("Segoe UI", 10, "bold"),
             bg=BG_CARD,
             fg="#818cf8",

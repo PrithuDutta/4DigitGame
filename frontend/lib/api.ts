@@ -1,15 +1,9 @@
+export type Mode = "2p" | "3p";
+export type Difficulty = "easy" | "hard";
 export type Phase = "difficulty_select" | "mode_select" | "name_entry" | "round" | "score" | "podium";
-export type Mode = "2p" | "3p" | null;
-export type Difficulty = "easy" | "hard" | null;
-export type ClickKey = "enter" | "shift" | "mouse";
+export type PressKey = "enter" | "shift" | "mouse";
 
-export interface Clicks {
-  enter: boolean;
-  shift: boolean;
-  mouse: boolean;
-}
-
-export interface RoundScoreBreakdown {
+export interface RoundScoreDTO {
   solve_time: number | null;
   solve_bonus: number;
   speed_bonus: number;
@@ -17,22 +11,22 @@ export interface RoundScoreBreakdown {
   round_score: number;
 }
 
-export interface RoundHistoryEntry {
-  round_number: number;
-  number: string;
-  scores: Record<string, RoundScoreBreakdown>;
-}
-
-export interface Standing {
+export interface StandingDTO {
   player_id: string;
   name: string;
   score: number;
 }
 
+export interface RoundHistoryEntryDTO {
+  round_number: number;
+  number: string;
+  scores: Record<string, RoundScoreDTO>;
+}
+
 export interface GameStateDTO {
   phase: Phase;
-  mode: Mode;
-  difficulty: Difficulty;
+  mode: Mode | null;
+  difficulty: Difficulty | null;
   round_time: number;
   round_number: number;
   rounds_per_game: number;
@@ -42,76 +36,103 @@ export interface GameStateDTO {
   p1_score: number;
   p2_score: number;
   p3_score: number;
-  standings: Standing[];
+  standings: StandingDTO[];
   round: {
     number: string;
     started: boolean;
-    clicks: Clicks;
+    clicks: { enter: boolean; shift: boolean; mouse: boolean };
     deadline_ts: number | null;
   };
   score_message: string;
   last_number: string;
-  last_round_scores: Record<string, RoundScoreBreakdown>;
-  round_history: RoundHistoryEntry[];
-  ready: Clicks;
+  last_round_scores: Record<string, RoundScoreDTO>;
+  round_history: RoundHistoryEntryDTO[];
+  ready: { enter: boolean; shift: boolean; mouse: boolean };
+}
+
+export interface ConfigDTO {
+  round_time: number;
+  colors: {
+    bg_dark: string;
+    bg_card: string;
+    accent_blue: string;
+    accent_blue_hover: string;
+    text_main: string;
+    text_muted: string;
+    text_dim: string;
+    color_gold: string;
+    color_error: string;
+    color_success: string;
+  };
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:5000";
 
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? `Request failed: ${res.status}`);
   }
 
   return res.json();
 }
 
-export const getState = () => api<GameStateDTO>("/api/state");
-
-export const postDifficulty = (difficulty: "easy" | "hard") =>
-  api<GameStateDTO>("/api/difficulty", { method: "POST", body: JSON.stringify({ difficulty }) });
-
-export const postMode = (mode: "2p" | "3p") =>
-  api<GameStateDTO>("/api/mode", { method: "POST", body: JSON.stringify({ mode }) });
-
-export const postNames = (p1_name: string, p2_name: string, p3_name: string) =>
-  api<GameStateDTO>("/api/names", {
+const get = <T>(path: string) => request<T>(path);
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, {
     method: "POST",
-    body: JSON.stringify({ p1_name, p2_name, p3_name }),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-export const postNewNumber = () =>
-  api<GameStateDTO>("/api/round/new-number", { method: "POST" });
+export function getConfig() {
+  return get<ConfigDTO>("/api/config");
+}
 
-export const postPress = (key: ClickKey) =>
-  api<GameStateDTO>("/api/round/press", { method: "POST", body: JSON.stringify({ key }) });
+export function getState() {
+  return get<GameStateDTO>("/api/state");
+}
 
-export const postTimeout = () =>
-  api<GameStateDTO>("/api/round/timeout", { method: "POST" });
+export function postDifficulty(difficulty: Difficulty) {
+  return post<GameStateDTO>("/api/difficulty", { difficulty });
+}
 
-export const postScoreReady = (key: ClickKey) =>
-  api<GameStateDTO>("/api/score/ready", { method: "POST", body: JSON.stringify({ key }) });
+export function postMode(mode: Mode) {
+  return post<GameStateDTO>("/api/mode", { mode });
+}
 
-export const postBackToModeSelect = () =>
-  api<GameStateDTO>("/api/mode-select", { method: "POST" });
+export function postNames(p1_name: string, p2_name: string, p3_name: string) {
+  return post<GameStateDTO>("/api/names", { p1_name, p2_name, p3_name });
+}
 
-export const getSandboxPuzzle = () =>
-  api<{ number: string; digits: number[] }>("/api/sandbox/new-puzzle");
+export function postNewNumber() {
+  return post<GameStateDTO>("/api/round/new-number");
+}
 
-export const postAdminLogin = (password: string) =>
-  api<{ ok: boolean }>("/api/admin/login", {
-    method: "POST",
-    body: JSON.stringify({ password }),
-  });
+export function postPress(key: PressKey) {
+  return post<GameStateDTO>("/api/round/press", { key });
+}
 
-export const postAdminScores = (p1_score: number, p2_score: number, p3_score: number) =>
-  api<GameStateDTO>("/api/admin/scores", {
-    method: "POST",
-    body: JSON.stringify({ p1_score, p2_score, p3_score }),
-  });
+export function postTimeout() {
+  return post<GameStateDTO>("/api/round/timeout");
+}
+
+export function postScoreReady(key: PressKey) {
+  return post<GameStateDTO>("/api/score/ready", { key });
+}
+
+export function postBackToModeSelect() {
+  return post<GameStateDTO>("/api/mode-select");
+}
+
+export function postAdminLogin(password: string) {
+  return post<{ ok: boolean }>("/api/admin/login", { password });
+}
+
+export function postAdminScores(p1_score: number, p2_score: number, p3_score: number) {
+  return post<GameStateDTO>("/api/admin/scores", { p1_score, p2_score, p3_score });
+}

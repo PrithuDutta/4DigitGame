@@ -68,6 +68,11 @@ class Room(GameState):
         self.last_activity_ts = self.created_ts
         self.lock = threading.Lock()
 
+        # GameState.__init__ defaults to "difficulty_select" — there's no
+        # online lobby screen for that phase (online always draws from the
+        # combined easy+hard pool), so a fresh Room skips straight past it.
+        self.phase = "mode_select"
+
     # --- seating ---
 
     def _required_slots(self):

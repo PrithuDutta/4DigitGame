@@ -1,17 +1,42 @@
 export type Mode = "2p" | "3p";
-export type Phase = "mode_select" | "name_entry" | "round" | "score";
+export type Difficulty = "easy" | "hard";
+export type Phase = "difficulty_select" | "mode_select" | "name_entry" | "round" | "score" | "podium";
 export type PressKey = "enter" | "shift" | "mouse";
+
+export interface RoundScoreDTO {
+  solve_time: number | null;
+  solve_bonus: number;
+  speed_bonus: number;
+  rank_bonus: number;
+  round_score: number;
+}
+
+export interface StandingDTO {
+  player_id: string;
+  name: string;
+  score: number;
+}
+
+export interface RoundHistoryEntryDTO {
+  round_number: number;
+  number: string;
+  scores: Record<string, RoundScoreDTO>;
+}
 
 export interface GameStateDTO {
   phase: Phase;
   mode: Mode | null;
+  difficulty: Difficulty | null;
   round_time: number;
+  round_number: number;
+  rounds_per_game: number;
   p1_name: string;
   p2_name: string;
   p3_name: string;
   p1_score: number;
   p2_score: number;
   p3_score: number;
+  standings: StandingDTO[];
   round: {
     number: string;
     started: boolean;
@@ -20,6 +45,8 @@ export interface GameStateDTO {
   };
   score_message: string;
   last_number: string;
+  last_round_scores: Record<string, RoundScoreDTO>;
+  round_history: RoundHistoryEntryDTO[];
   ready: { enter: boolean; shift: boolean; mouse: boolean };
 }
 
@@ -68,6 +95,10 @@ export function getConfig() {
 
 export function getState() {
   return get<GameStateDTO>("/api/state");
+}
+
+export function postDifficulty(difficulty: Difficulty) {
+  return post<GameStateDTO>("/api/difficulty", { difficulty });
 }
 
 export function postMode(mode: Mode) {

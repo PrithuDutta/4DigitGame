@@ -86,6 +86,58 @@ reachable from the score screen and lets you manually overwrite the scoreboard.
 Both the name-entry and in-round screens also have an **Exit** button that abandons
 the current game and returns to mode select.
 
+## Sandbox Mode (web app only)
+
+A single-player, untimed puzzle mode, picked from the same mode-select screen
+("1 Player (Sandbox)"). It's unrelated to the racing game's scoring or rounds —
+it's frontend-only (`frontend/components/Sandbox.tsx` +
+`frontend/lib/sandboxMath.ts`), talking to the backend only once, to fetch four
+random digits from `GET /api/sandbox/new-puzzle` (kept server-side for a real
+CSPRNG instead of `Math.random()`, and as a hook for future backend features
+like seeded or shareable puzzles — nothing about actually solving the puzzle
+touches the backend).
+
+**Goal:** combine all four number tiles, each used exactly once, to reach a
+target value (currently fixed at 10 — no UI to change it yet) using `+ − × ÷ ^`
+and an nth-root, plus unary `!` (factorial) and `√`.
+
+**Interaction:**
+- Tap a binary op button (`+ − × ÷ ^ ⁿ√`) to open a staging area showing that
+  operation's shape with empty slots. Tap number tiles to fill the slots in
+  order (for `ⁿ√`, degree first, then radicand) — the next expected slot is
+  highlighted. Tap the same op button again to cancel. Tap **Enter** to commit:
+  the two source tiles are consumed and replaced by one result tile.
+- For `!` and `√`, tap a tile to select it, then tap the op button — it
+  transforms in place immediately (no staging/Enter needed, since there's only
+  one operand).
+- Result tiles are ordinary tiles: they can be combined or transformed again,
+  no different from the originals.
+- **Undo** is a stack: it pops the most recent committed operation, splitting a
+  merged tile back into its two sources (or reverting a unary transform). The
+  **History** list underneath is the visual counterpart of that stack, newest
+  first. **Reset** goes straight back to the original four tiles. **New Puzzle**
+  fetches a fresh set of four from the backend.
+- Winning is detected the moment exactly one tile remains and its value is
+  within tolerance of the target (`isWithinTolerance` in `sandboxMath.ts`, not
+  exact float equality — a root or exponent can leave tiny floating-point
+  error on an otherwise-correct answer).
+
+**Domain guards** (`applyBinary`/`applyUnary` in `sandboxMath.ts`, unit-style
+verified): division by zero, `0^0`, a negative base to a non-integer power,
+factorial of a negative or non-integer (or one large enough to overflow),
+square root of a negative, and 0th-degree roots are all rejected with an inline
+message instead of producing `NaN`/`Infinity` tiles or corrupting state. The
+one subtlety worth knowing: an **even** root (or an even-denominator fractional
+exponent) of a negative number is rejected, but an **odd** root of a negative
+number is a legitimate real result (e.g. the cube root of −8 is −2) and is
+computed correctly — `Math.pow(negative, fraction)` in JS just returns `NaN`
+unconditionally, so odd-degree roots of a negative radicand are handled by
+hand (negate, root the positive, negate back) rather than trusting `Math.pow`.
+
+Tiles are tracked by a unique instance id, not by value, so two tiles that
+happen to show the same number (e.g. a puzzle like `1,1,2,4`) are consumed
+independently — tapping one never affects the other.
+
 ## Project structure
 
 ```
@@ -116,8 +168,11 @@ the current game and returns to mode select.
     │   ├── RoundScreen.tsx
     │   ├── ScoreScreen.tsx      # includes the per-round solve/speed/rank breakdown table
     │   ├── Podium.tsx           # final standings + round-by-round recap, shown after round 10
+    │   ├── Sandbox.tsx          # 1-player puzzle mode — frontend-only, no relation to GameState
     │   └── AdminDialog.tsx
-    └── lib/api.ts             # Typed fetch wrappers for every backend endpoint
+    └── lib/
+        ├── api.ts                # Typed fetch wrappers for every backend endpoint
+        └── sandboxMath.ts        # Pure ops/domain-guards/formatting for Sandbox mode
 ```
 
 ## Running the desktop app
@@ -172,6 +227,7 @@ response. A `threading.Lock` in `app.py` serializes state mutations.
 |---|---|
 | `GET /api/state` | Current game state |
 | `GET /api/config` | Round time + color palette |
+| `GET /api/sandbox/new-puzzle` | Sandbox mode only — 4 fresh random digits, stateless |
 | `POST /api/mode` | Pick `2p`/`3p`, moves to `name_entry` |
 | `POST /api/names` | Set player names, resets scores and round count, starts round 1 |
 | `POST /api/round/new-number` | SPACE — reroll the number (only before anyone's pressed) |
@@ -183,14 +239,20 @@ response. A `threading.Lock` in `app.py` serializes state mutations.
 | `POST /api/admin/scores` | Overwrite scores directly |
 
 **Frontend** (`frontend/components/GameApp.tsx`). A single client component holds
-the current `GameStateDTO` and renders one of the four screen components based on
-`state.phase`. It attaches one global `keydown`/`click` listener (mirroring the
-Tkinter app's root-level key bindings) that routes `ENTER`/`SHIFT`/`SPACE`/click to
-the right API call depending on the current phase — pressing `ENTER` calls
-`round/press` mid-round but `score/ready` on the score screen, exactly like
-`enter_pressed()` does in `src/ui/app.py`. The countdown timer is computed
-client-side from a `deadline_ts` timestamp the backend hands back, and the frontend
-calls `round/timeout` once it elapses — the backend never runs its own timer.
+the current `GameStateDTO` and renders a screen component based on `state.phase`.
+It attaches one global `keydown`/`click` listener (mirroring the Tkinter app's
+root-level key bindings) that routes `ENTER`/`SHIFT`/`SPACE`/click to the right
+API call depending on the current phase — pressing `ENTER` calls `round/press`
+mid-round but `score/ready` on the score screen, exactly like `enter_pressed()`
+does in `src/ui/app.py`. The countdown timer is computed client-side from a
+`deadline_ts` timestamp the backend hands back, and the frontend calls
+`round/timeout` once it elapses — the backend never runs its own timer.
+
+Sandbox mode is a `showSandbox` boolean local to `GameApp`, not a `state.phase`
+value — reachable only from the mode-select screen, it fully overrides the
+phase-based render while active and never touches `state`. This is why those
+global key bindings are inert in Sandbox: they all key off `state.phase`, which
+stays whatever it was (`mode_select`) the entire time Sandbox is open.
 
 The `AdminDialog` modal ignores the global key bindings while open (checked via a
 ref) so typing a password doesn't also register as a player's key press — the
@@ -236,3 +298,5 @@ broken by player order) for the podium's 1st/2nd/3rd placement.
   actual puzzle/answer-submission mechanic exists.
 - Scores only ever persist for the current 10-round game. Admin-edited scores,
   like round scores, get wiped the moment the next game's `confirm_names()` runs.
+- Sandbox mode's target is hardcoded to 10 (the `TARGET` constant in
+  `Sandbox.tsx`) — there's no UI to change it yet, by design for now.

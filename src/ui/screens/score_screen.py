@@ -1,5 +1,5 @@
 import tkinter as tk
-from src.core.config import BG_DARK, BG_CARD, TEXT_MAIN, TEXT_MUTED
+from src.core.config import BG_DARK, BG_CARD, TEXT_MAIN, TEXT_MUTED, FONT_FAMILY
 
 class ScoreScreen(tk.Frame):
     def __init__(self, parent, controller):
@@ -11,7 +11,7 @@ class ScoreScreen(tk.Frame):
 
         self.score_label = tk.Label(
             inner,
-            font=("Segoe UI", 13, "bold"),
+            font=(FONT_FAMILY, 13, "bold"),
             fg=TEXT_MAIN,
             bg=BG_DARK,
             justify="center",
@@ -21,7 +21,7 @@ class ScoreScreen(tk.Frame):
         self.score_hint = tk.Label(
             inner,
             text="Press ENTER, LMB, and SHIFT to continue",
-            font=("Segoe UI", 9),
+            font=(FONT_FAMILY, 9),
             fg=TEXT_MUTED,
             bg=BG_DARK,
         )
@@ -33,12 +33,12 @@ class ScoreScreen(tk.Frame):
         self.admin_btn = tk.Button(
             btn_frame,
             text="Admin Panel",
-            font=("Segoe UI", 9, "bold"),
+            font=(FONT_FAMILY, 9, "bold"),
             bg=BG_CARD,
-            fg="#818cf8",
+            fg="#4f46e5",
             relief="flat",
-            activebackground="#22223b",
-            activeforeground="#a5b4fc",
+            activebackground="#e0e7ff",
+            activeforeground="#4338ca",
             cursor="hand2",
             padx=12,
             pady=4,
@@ -49,11 +49,11 @@ class ScoreScreen(tk.Frame):
         self.menu_btn = tk.Button(
             btn_frame,
             text="Change Mode",
-            font=("Segoe UI", 9, "bold"),
+            font=(FONT_FAMILY, 9, "bold"),
             bg=BG_CARD,
             fg=TEXT_MUTED,
             relief="flat",
-            activebackground="#22223b",
+            activebackground="#e0e7ff",
             activeforeground=TEXT_MAIN,
             cursor="hand2",
             padx=12,

@@ -4,15 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import type { Mode } from "@/lib/api";
 
 interface Props {
-  mode: Mode;
+  mode: Mode | null;
   initialP1: string;
   initialP2: string;
   initialP3: string;
   onSubmit: (p1: string, p2: string, p3: string) => void;
+  onExit: () => void;
   error: string | null;
 }
 
-export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSubmit, error }: Props) {
+export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSubmit, onExit, error }: Props) {
   const [p1, setP1] = useState(initialP1);
   const [p2, setP2] = useState(initialP2);
   const [p3, setP3] = useState(initialP3);
@@ -80,6 +81,14 @@ export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSu
           onClick={submit}
         >
           Start Game
+        </button>
+
+        <button
+          className="mt-2 w-full rounded px-5 py-3 text-sm font-bold text-[var(--text-muted)]"
+          style={{ background: "var(--bg-card)" }}
+          onClick={onExit}
+        >
+          Exit
         </button>
       </div>
     </div>

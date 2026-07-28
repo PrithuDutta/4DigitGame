@@ -1,5 +1,5 @@
 import tkinter as tk
-from src.core.config import BG_DARK, BG_CARD, TEXT_DIM, TEXT_MAIN, TEXT_MUTED, COLOR_GOLD
+from src.core.config import BG_DARK, BG_CARD, TEXT_DIM, TEXT_MAIN, TEXT_MUTED, COLOR_GOLD, FONT_FAMILY
 from src.core.utils import generate_4digit_number
 
 class RoundScreen(tk.Frame):
@@ -10,7 +10,7 @@ class RoundScreen(tk.Frame):
         self.timer_label = tk.Label(
             self,
             text="",
-            font=("Segoe UI", 14, "bold"),
+            font=(FONT_FAMILY, 14, "bold"),
             fg=COLOR_GOLD,
             bg=BG_DARK,
         )
@@ -19,12 +19,12 @@ class RoundScreen(tk.Frame):
         tk.Label(
             self,
             text="RANDOM NUMBER",
-            font=("Segoe UI", 9, "bold"),
+            font=(FONT_FAMILY, 9, "bold"),
             fg=TEXT_DIM,
             bg=BG_DARK,
         ).pack(pady=(35, 5))
 
-        card = tk.Frame(self, bg=BG_CARD, highlightbackground="#272735", highlightthickness=1)
+        card = tk.Frame(self, bg=BG_CARD, highlightbackground="#93c5fd", highlightthickness=1)
         card.pack(pady=10, padx=30, fill="x")
 
         self.number = tk.Label(
@@ -39,7 +39,7 @@ class RoundScreen(tk.Frame):
         self.status = tk.Label(
             self,
             text="Press SPACE for new number",
-            font=("Segoe UI", 10),
+            font=(FONT_FAMILY, 10),
             fg=TEXT_MUTED,
             bg=BG_DARK,
         )
@@ -49,6 +49,7 @@ class RoundScreen(tk.Frame):
         self.indicators_frame = tk.Frame(self, bg=BG_DARK)
         self.indicators_frame.pack(pady=10)
 
+<<<<<<< Updated upstream
         self.p1_ind = tk.Label(self.indicators_frame, text="", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
         self.p1_ind.grid(row=0, column=0, padx=5)
 
@@ -57,6 +58,16 @@ class RoundScreen(tk.Frame):
 
         self.p3_ind = tk.Label(self.indicators_frame, text="", font=("Segoe UI", 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
         self.p3_ind.grid(row=0, column=2, padx=5)
+=======
+        self.agam_ind = tk.Label(self.indicators_frame, text="Agam [ENTER]", font=(FONT_FAMILY, 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.agam_ind.grid(row=0, column=0, padx=5)
+
+        self.prithu_ind = tk.Label(self.indicators_frame, text="Prithu [SHIFT]", font=(FONT_FAMILY, 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.prithu_ind.grid(row=0, column=1, padx=5)
+
+        self.ritvik_ind = tk.Label(self.indicators_frame, text="Ritvik [LMB]", font=(FONT_FAMILY, 10, "bold"), fg=TEXT_MUTED, bg=BG_DARK, width=15)
+        self.ritvik_ind.grid(row=0, column=2, padx=5)
+>>>>>>> Stashed changes
 
     def reset_ui(self, mode):
         self.timer_label.config(text="")

@@ -139,9 +139,26 @@ def post_admin_scores():
 
 
 if __name__ == "__main__":
+    import os
+
+    # socketio.run() starts eventlet's own WSGI server directly — this is
+    # the standard way to serve a small Flask-SocketIO app in production
+    # too, not just for local dev. Gunicorn's `--worker-class eventlet`
+    # looks equivalent but recent gunicorn releases dropped that worker
+    # plugin's entry point entirely, so it fails at startup; running
+    # eventlet's server directly here sidesteps that gap completely.
+    #
+    # PORT is set by the hosting platform (e.g. Render) in production;
+    # locally it falls back to 5000. FLASK_DEBUG defaults on for local dev
+    # convenience — it must be explicitly turned off in production, since
+    # Flask's debug mode exposes an interactive Python debugger to anyone
+    # who can trigger a server error, which is a serious security hole on
+    # a publicly reachable deployment.
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "1") == "1"
+
     # use_reloader=False: Werkzeug's file-watching auto-restart doesn't mix
     # reliably with eventlet's async WSGI server (the reloader's background
     # thread can starve eventlet's greenthread scheduler and hang all I/O).
-    # debug=True still gives the interactive debugger on exceptions; you
-    # just need to manually restart after editing backend files now.
-    socketio.run(app, debug=True, port=5000, use_reloader=False)
+    # You need to manually restart after editing backend files locally.
+    socketio.run(app, host="0.0.0.0", port=port, debug=debug, use_reloader=False)

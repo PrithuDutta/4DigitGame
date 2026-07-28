@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+:root {
+  --bg-dark: #0d0d12;
+  --bg-card: #16161f;
+  --accent-blue: #4f46e5;
+  --accent-blue-hover: #6366f1;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dim: #4b5563;
+  --color-gold: #fbbf24;
+  --color-error: #f87171;
+  --color-success: #10b981;
+}
+
+body {
+  background: var(--bg-dark);
+  color: var(--text-main);
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+}

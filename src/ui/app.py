@@ -2,6 +2,7 @@ import tkinter as tk
 from src.core.config import BG_DARK, ROUND_TIME
 from src.core.utils import generate_4digit_number
 from src.ui.screens.mode_screen import ModeScreen
+from src.ui.screens.name_screen import NameScreen
 from src.ui.screens.round_screen import RoundScreen
 from src.ui.screens.score_screen import ScoreScreen
 from src.ui.dialogs.admin import AdminDialog, ScoreEditorDialog
@@ -21,9 +22,13 @@ class App:
         root.geometry(f"{w}x{h}+{x}+{y}")
 
         self.mode = None
-        self.agam = 0
-        self.prithu = 0
-        self.ritvik = 0
+        self.p1_score = 0
+        self.p2_score = 0
+        self.p3_score = 0
+
+        self.p1_name = "Player 1"
+        self.p2_name = "Player 2"
+        self.p3_name = "Player 3"
 
         self.round_started = False
         self.timer = ROUND_TIME
@@ -33,12 +38,13 @@ class App:
 
         self.enter_ready = False
         self.shift_ready = False
-        self.ritvik_ready = False
+        self.p3_ready = False
         self.score_message = ""
         self.last_number = ""
 
         # Initialize screens
         self.mode_screen = ModeScreen(self.root, self)
+        self.name_screen = NameScreen(self.root, self)
         self.round_screen = RoundScreen(self.root, self)
         self.score_screen = ScoreScreen(self.root, self)
 
@@ -54,17 +60,36 @@ class App:
     def show_mode_screen(self):
         self.round_screen.pack_forget()
         self.score_screen.pack_forget()
+        self.name_screen.pack_forget()
         self.mode_screen.pack(fill="both", expand=True)
 
     def start_game_mode(self, mode):
         self.mode = mode
         self.mode_screen.pack_forget()
+        self.show_name_screen()
+
+    def show_name_screen(self):
+        self.round_screen.pack_forget()
+        self.score_screen.pack_forget()
+        self.mode_screen.pack_forget()
+
+        self.name_screen.load(self.mode, self.p1_name, self.p2_name, self.p3_name)
+        self.name_screen.pack(fill="both", expand=True)
+
+    def confirm_names(self, p1_name, p2_name, p3_name):
+        self.p1_name = p1_name
+        self.p2_name = p2_name
+        if self.mode == "3p":
+            self.p3_name = p3_name
+
+        self.name_screen.pack_forget()
         self.show_round()
 
     def show_round(self):
         self.score_screen.pack_forget()
         self.mode_screen.pack_forget()
-            
+        self.name_screen.pack_forget()
+
         self.round_screen.pack(fill="both", expand=True)
 
         self.round_started = False
@@ -83,7 +108,7 @@ class App:
 
         self.enter_ready = False
         self.shift_ready = False
-        self.ritvik_ready = False
+        self.p3_ready = False
         self.score_message = message
 
         self.update_score_screen_display()
@@ -94,20 +119,20 @@ class App:
         shift_status = "✓ SHIFT ready" if self.shift_ready else "Waiting for SHIFT..."
         
         if self.mode == "3p":
-            ritvik_status = "✓ RITVIK ready" if self.ritvik_ready else "Waiting for Click..."
+            p3_status = f"✓ {self.p3_name.upper()} ready" if self.p3_ready else "Waiting for Click..."
             score_text = (
                 f"{self.score_message}\n\n"
                 f"Previous Number: {self.last_number}\n\n"
-                f"Agam: {self.agam}  |  Prithu: {self.prithu}  |  Ritvik: {self.ritvik}\n\n"
+                f"{self.p1_name}: {self.p1_score}  |  {self.p2_name}: {self.p2_score}  |  {self.p3_name}: {self.p3_score}\n\n"
                 f"{enter_status}\n"
                 f"{shift_status}\n"
-                f"{ritvik_status}"
+                f"{p3_status}"
             )
         else:
             score_text = (
                 f"{self.score_message}\n\n"
                 f"Previous Number: {self.last_number}\n\n"
-                f"Agam: {self.agam}   |   Prithu: {self.prithu}\n\n"
+                f"{self.p1_name}: {self.p1_score}   |   {self.p2_name}: {self.p2_score}\n\n"
                 f"{enter_status}\n"
                 f"{shift_status}"
             )
@@ -132,7 +157,7 @@ class App:
 
         if self.round_screen.winfo_ismapped():
             self.clicks["enter"] = True
-            self.round_screen.agam_ind.config(fg="#10b981")
+            self.round_screen.p1_ind.config(fg="#10b981")
             self.start_timer()
 
     def shift_pressed(self, event):
@@ -143,7 +168,7 @@ class App:
 
         if self.round_screen.winfo_ismapped():
             self.clicks["shift"] = True
-            self.round_screen.prithu_ind.config(fg="#10b981")
+            self.round_screen.p2_ind.config(fg="#10b981")
             self.start_timer()
 
     def mouse_clicked(self, event):
@@ -151,7 +176,7 @@ class App:
             if isinstance(event.widget, tk.Button):
                 return
             if self.mode == "3p":
-                self.ritvik_ready = True
+                self.p3_ready = True
                 self.check_next_round()
             return
 
@@ -160,7 +185,7 @@ class App:
                 return
                 
             self.clicks["mouse"] = True
-            self.round_screen.ritvik_ind.config(fg="#10b981")
+            self.round_screen.p3_ind.config(fg="#10b981")
             self.start_timer()
 
     def start_timer(self):
@@ -201,34 +226,34 @@ class App:
         if self.mode == "2p":
             entered = self.clicks["enter"]
             shifted = self.clicks["shift"]
-            
+
             if entered and not shifted:
-                self.agam += 1
-                self.show_score("POINT: Agam")
+                self.p1_score += 1
+                self.show_score(f"POINT: {self.p1_name}")
             elif shifted and not entered:
-                self.prithu += 1
-                self.show_score("POINT: Prithu")
+                self.p2_score += 1
+                self.show_score(f"POINT: {self.p2_name}")
             else:
                 self.show_score("ROUND NULL")
         else:
             enter_c = self.clicks["enter"]
             shift_c = self.clicks["shift"]
             mouse_c = self.clicks["mouse"]
-            
+
             clicked_count = sum([enter_c, shift_c, mouse_c])
 
             if clicked_count == 2:
                 winners = []
                 if enter_c:
-                    self.agam += 1
-                    winners.append("Agam")
+                    self.p1_score += 1
+                    winners.append(self.p1_name)
                 if shift_c:
-                    self.prithu += 1
-                    winners.append("Prithu")
+                    self.p2_score += 1
+                    winners.append(self.p2_name)
                 if mouse_c:
-                    self.ritvik += 1
-                    winners.append("Ritvik")
-                
+                    self.p3_score += 1
+                    winners.append(self.p3_name)
+
                 self.show_score(f"POINTS: {' & '.join(winners)}")
             else:
                 self.show_score("ROUND NULL (No Points)")
@@ -236,7 +261,7 @@ class App:
     def check_next_round(self):
         if self.mode == "3p":
             self.update_score_screen_display()
-            if self.enter_ready and self.shift_ready and self.ritvik_ready:
+            if self.enter_ready and self.shift_ready and self.p3_ready:
                 self.root.after(500, self.show_round)
         else:
             self.update_score_screen_display()

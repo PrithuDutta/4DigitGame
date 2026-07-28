@@ -69,13 +69,13 @@ class ScoreEditorDialog(tk.Toplevel):
         fields = tk.Frame(self, bg=BG_DARK)
         fields.pack()
 
-        self.agam_var = tk.StringVar(value=str(self.controller.agam))
-        self.prithu_var = tk.StringVar(value=str(self.controller.prithu))
-        self.ritvik_var = tk.StringVar(value=str(self.controller.ritvik))
+        self.p1_var = tk.StringVar(value=str(self.controller.p1_score))
+        self.p2_var = tk.StringVar(value=str(self.controller.p2_score))
+        self.p3_var = tk.StringVar(value=str(self.controller.p3_score))
 
-        score_rows = [("Agam", self.agam_var), ("Prithu", self.prithu_var)]
+        score_rows = [(self.controller.p1_name, self.p1_var), (self.controller.p2_name, self.p2_var)]
         if self.controller.mode == "3p":
-            score_rows.append(("Ritvik", self.ritvik_var))
+            score_rows.append((self.controller.p3_name, self.p3_var))
 
         for row, (name, var) in enumerate(score_rows):
             tk.Label(fields, text=f"{name}:", font=("Segoe UI", 10, "bold"),
@@ -97,10 +97,10 @@ class ScoreEditorDialog(tk.Toplevel):
 
     def save(self, _event=None):
         try:
-            self.controller.agam = int(self.agam_var.get())
-            self.controller.prithu = int(self.prithu_var.get())
+            self.controller.p1_score = int(self.p1_var.get())
+            self.controller.p2_score = int(self.p2_var.get())
             if self.controller.mode == "3p":
-                self.controller.ritvik = int(self.ritvik_var.get())
+                self.controller.p3_score = int(self.p3_var.get())
             
             # Request app to update score display
             if hasattr(self.controller, 'update_score_screen_display'):

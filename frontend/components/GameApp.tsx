@@ -19,6 +19,7 @@ import NameScreen from "./NameScreen";
 import RoundScreen from "./RoundScreen";
 import ScoreScreen from "./ScoreScreen";
 import Podium from "./Podium";
+import Sandbox from "./Sandbox";
 import AdminDialog from "./AdminDialog";
 
 export default function GameApp() {
@@ -26,6 +27,9 @@ export default function GameApp() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  // Sandbox is single-player, frontend-only, and orthogonal to the backend's
+  // multiplayer phase machine — it's a separate local view, not a phase.
+  const [showSandbox, setShowSandbox] = useState(false);
 
   const seqRef = useRef(0);
   const stateRef = useRef<GameStateDTO | null>(null);
@@ -118,6 +122,14 @@ export default function GameApp() {
     };
   }, [applyAction]);
 
+  if (showSandbox) {
+    return (
+      <div className="flex min-h-screen flex-1 flex-col">
+        <Sandbox onExit={() => setShowSandbox(false)} />
+      </div>
+    );
+  }
+
   if (!state) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">
@@ -133,7 +145,7 @@ export default function GameApp() {
       )}
 
       {state.phase === "mode_select" && (
-        <ModeScreen onSelect={(mode) => applyAction(() => postMode(mode))} />
+        <ModeScreen onSelect={(mode) => applyAction(() => postMode(mode))} onSandbox={() => setShowSandbox(true)} />
       )}
 
       {state.phase === "name_entry" && (

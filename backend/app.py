@@ -1,3 +1,4 @@
+import secrets
 import eventlet
 eventlet.monkey_patch()
 
@@ -51,6 +52,18 @@ def get_config():
 @app.get("/api/state")
 def get_state():
     return state_response()
+
+
+# Sandbox mode is single-player and frontend-only (tile puzzle solving, no
+# scoring, no shared session) — this endpoint is deliberately stateless and
+# independent of GameState/lock. It exists just so tile values come from a
+# proper server-side CSPRNG instead of Math.random(); it's a hook for future
+# backend-side sandbox features (e.g. seeded/shareable puzzles, best times),
+# not a state machine.
+@app.get("/api/sandbox/new-puzzle")
+def get_sandbox_puzzle():
+    number = str(secrets.randbelow(10000)).zfill(4)
+    return jsonify({"number": number, "digits": [int(d) for d in number]})
 
 
 @app.post("/api/difficulty")

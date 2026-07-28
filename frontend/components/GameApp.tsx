@@ -5,6 +5,7 @@ import type { GameStateDTO } from "@/lib/api";
 import {
   getState,
   postBackToModeSelect,
+  postDifficulty,
   postMode,
   postNames,
   postNewNumber,
@@ -12,23 +13,28 @@ import {
   postScoreReady,
   postTimeout,
 } from "@/lib/api";
+import DifficultyScreen from "./DifficultyScreen";
 import ModeScreen from "./ModeScreen";
 import NameScreen from "./NameScreen";
 import RoundScreen from "./RoundScreen";
 import ScoreScreen from "./ScoreScreen";
+import Podium from "./Podium";
 import AdminDialog from "./AdminDialog";
 
 export default function GameApp() {
   const [state, setState] = useState<GameStateDTO | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [, forceTick] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
   const seqRef = useRef(0);
   const stateRef = useRef<GameStateDTO | null>(null);
   const adminOpenRef = useRef(false);
-  stateRef.current = state;
-  adminOpenRef.current = adminOpen;
+
+  useEffect(() => {
+    stateRef.current = state;
+    adminOpenRef.current = adminOpen;
+  }, [state, adminOpen]);
 
   useEffect(() => {
     getState()
@@ -47,17 +53,25 @@ export default function GameApp() {
 
   // Drive the round countdown and fire the timeout once it elapses.
   useEffect(() => {
+    // No explicit reset when not in an active round: RoundScreen only ever
+    // displays remainingSeconds while state.round.started is true, so a
+    // stale value from a previous round is simply never shown.
     if (!state || state.phase !== "round" || !state.round.started || state.round.deadline_ts === null) {
       return;
     }
     const deadline = state.round.deadline_ts;
-    const id = setInterval(() => {
-      if (deadline - Date.now() / 1000 <= 0) {
+
+    const tick = () => {
+      const remaining = deadline - Date.now() / 1000;
+      if (remaining <= 0) {
         applyAction(() => postTimeout());
       } else {
-        forceTick((t) => t + 1);
+        setRemainingSeconds(Math.ceil(remaining));
       }
-    }, 200);
+    };
+
+    tick();
+    const id = setInterval(tick, 200);
     return () => clearInterval(id);
   }, [state?.phase, state?.round.started, state?.round.deadline_ts, applyAction]);
 
@@ -112,13 +126,12 @@ export default function GameApp() {
     );
   }
 
-  const remainingSeconds =
-    state.phase === "round" && state.round.started && state.round.deadline_ts !== null
-      ? Math.max(0, Math.ceil(state.round.deadline_ts - Date.now() / 1000))
-      : null;
-
   return (
     <div className="flex min-h-screen flex-1 flex-col">
+      {state.phase === "difficulty_select" && (
+        <DifficultyScreen onSelect={(diff) => applyAction(() => postDifficulty(diff))} />
+      )}
+
       {state.phase === "mode_select" && (
         <ModeScreen onSelect={(mode) => applyAction(() => postMode(mode))} />
       )}
@@ -157,6 +170,10 @@ export default function GameApp() {
           onOpenAdmin={() => setAdminOpen(true)}
           onChangeMode={() => applyAction(() => postBackToModeSelect())}
         />
+      )}
+
+      {state.phase === "podium" && (
+        <Podium state={state} onPlayAgain={() => applyAction(() => postBackToModeSelect())} />
       )}
 
       {adminOpen && (

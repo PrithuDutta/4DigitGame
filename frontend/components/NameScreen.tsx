@@ -20,13 +20,13 @@ export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSu
   const [localError, setLocalError] = useState("");
   const firstInputRef = useRef<HTMLInputElement>(null);
 
+  // GameApp only ever renders <NameScreen> while phase === "name_entry", so this
+  // mounts fresh each time the screen appears — no need to sync p1/p2/p3 from
+  // props via an effect, useState's initializer already picks up the current
+  // values at mount. Just autofocus the first field once mounted.
   useEffect(() => {
-    setP1(initialP1);
-    setP2(initialP2);
-    setP3(initialP3);
-    setLocalError("");
     firstInputRef.current?.focus();
-  }, [mode, initialP1, initialP2, initialP3]);
+  }, []);
 
   const submit = () => {
     const t1 = p1.trim();

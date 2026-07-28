@@ -53,6 +53,17 @@ def get_state():
     return state_response()
 
 
+@app.post("/api/difficulty")
+def post_difficulty():
+    data = request.get_json(force=True) or {}
+    with lock:
+        try:
+            state.set_difficulty(data.get("difficulty"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    return state_response()
+
+
 @app.post("/api/mode")
 def post_mode():
     data = request.get_json(force=True) or {}

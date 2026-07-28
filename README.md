@@ -69,8 +69,22 @@ Both implementations show a ready-up step on the score screen: each player
 re-presses their input to signal they're ready, and once everyone has, the next
 round starts automatically with a new number.
 
+### Games, in the web app
+
+Entering names doesn't just start a round, it starts a **game**: scores reset to
+0 and you play exactly `ROUNDS_PER_GAME` (10) rounds. The score screen after each
+round shows a full breakdown table (`solve`/`speed`/`rank`/`round`/running
+`total` per player), not just a one-line message. After the 10th round's ready-up,
+instead of starting an 11th round the game ends and a **podium** screen shows
+final standings (1st/2nd/3rd by total score) plus a round-by-round recap table,
+with a "New Game" button that goes back to mode select. The desktop app has no
+such concept — it's still an unbounded round-after-round loop with a persistent
+scoreboard.
+
 An **Admin Panel** (password-gated, see `ADMIN_PASSWORD` in the config files) is
 reachable from the score screen and lets you manually overwrite the scoreboard.
+Both the name-entry and in-round screens also have an **Exit** button that abandons
+the current game and returns to mode select.
 
 ## Project structure
 
@@ -100,7 +114,8 @@ reachable from the score screen and lets you manually overwrite the scoreboard.
     │   ├── ModeScreen.tsx
     │   ├── NameScreen.tsx
     │   ├── RoundScreen.tsx
-    │   ├── ScoreScreen.tsx
+    │   ├── ScoreScreen.tsx      # includes the per-round solve/speed/rank breakdown table
+    │   ├── Podium.tsx           # final standings + round-by-round recap, shown after round 10
     │   └── AdminDialog.tsx
     └── lib/api.ts             # Typed fetch wrappers for every backend endpoint
 ```
@@ -140,9 +155,14 @@ defaults to `http://127.0.0.1:5000`) — update it if you run the backend elsewh
 
 **Backend state machine** (`backend/game_state.py`). One in-memory `GameState`
 object (module-level, no database) represents a single shared game session with
-four phases:
+five phases:
 
-`mode_select → name_entry → round → score → (round → score → ...)`
+`mode_select → name_entry → round → score → (round → score) × 10 → podium`
+
+`confirm_names()` is what actually starts a game: it resets scores to 0 and
+`round_number` to 1. `score_ready()` is what decides, once everyone's readied up,
+whether to start `round_number + 1` or — if that was round 10 — flip to `podium`
+instead.
 
 Every mutating endpoint returns the full current state as JSON, so the frontend
 never has to guess what changed — it just replaces its local copy with the
@@ -153,12 +173,12 @@ response. A `threading.Lock` in `app.py` serializes state mutations.
 | `GET /api/state` | Current game state |
 | `GET /api/config` | Round time + color palette |
 | `POST /api/mode` | Pick `2p`/`3p`, moves to `name_entry` |
-| `POST /api/names` | Set player names, moves to `round` (generates first number) |
-| `POST /api/round/new-number` | SPACE — reroll the number (only pre-press) |
+| `POST /api/names` | Set player names, resets scores and round count, starts round 1 |
+| `POST /api/round/new-number` | SPACE — reroll the number (only before anyone's pressed) |
 | `POST /api/round/press` | Register a key/click for `enter`/`shift`/`mouse`, timestamped server-side |
 | `POST /api/round/timeout` | Countdown hit 0 — score the round via `scoring.score_round()` from whoever pressed and when |
-| `POST /api/score/ready` | Mark a player ready on the score screen |
-| `POST /api/mode-select` | "Change Mode" — back to mode select (scores persist) |
+| `POST /api/score/ready` | Mark a player ready; once everyone is, starts the next round or (after round 10) moves to `podium` |
+| `POST /api/mode-select` | "Change Mode"/Exit/"New Game" — back to mode select |
 | `POST /api/admin/login` | Check the admin password |
 | `POST /api/admin/scores` | Overwrite scores directly |
 
@@ -190,8 +210,13 @@ by editing those four values. Ties in `solve_time` are broken by input order, so
 `GameState._finish_round()` builds one `PlayerRoundResult` per active player from
 `self.clicks` (did they press?) and `self.press_times` (when?), calls
 `score_round()`, adds each player's `round_score` onto their running total, and
-stores the full breakdown in `last_round_scores` (included in every `/api/state`
-response) for the frontend to display or debug against.
+stores the full breakdown (now including `solve_time` itself, for display) in
+`last_round_scores`. It also appends that breakdown to `round_history`, a list
+that accumulates for the whole game and gets wiped on the next `confirm_names()`
+— it's what `Podium.tsx` renders as the round-by-round recap table. Both
+`last_round_scores` and `round_history` are included in every `/api/state`
+response, along with `standings` (`p1`/`p2`/`p3` sorted by total score, ties
+broken by player order) for the podium's 1st/2nd/3rd placement.
 
 ## Notes
 
@@ -206,5 +231,8 @@ response) for the frontend to display or debug against.
   different now that their scoring models differ.
 - "Solving" in the web app currently just means pressing your key — there's no
   real puzzle-submission flow yet (no target number, no digit-arithmetic
-  validation). `solve_time` is measured from the first press of the round, which
-  is an interim stand-in until an actual puzzle/answer-submission mechanic exists.
+  validation). `solve_time` is measured from when the round actually started
+  (the puzzle was revealed) to your press, which is an interim stand-in until an
+  actual puzzle/answer-submission mechanic exists.
+- Scores only ever persist for the current 10-round game. Admin-edited scores,
+  like round scores, get wiped the moment the next game's `confirm_names()` runs.

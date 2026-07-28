@@ -69,7 +69,8 @@ export default function GameApp() {
       if (!s) return;
 
       if (e.code === "Space") {
-        if (s.phase === "round" && !s.round.started) applyAction(() => postNewNumber());
+        const anyPressed = s.round.clicks.enter || s.round.clicks.shift || s.round.clicks.mouse;
+        if (s.phase === "round" && !anyPressed) applyAction(() => postNewNumber());
         return;
       }
 

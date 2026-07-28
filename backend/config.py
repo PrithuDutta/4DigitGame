@@ -1,5 +1,3 @@
-ROUND_TIME = 15
-
 BG_DARK = "#0d0d12"
 BG_CARD = "#16161f"
 ACCENT_BLUE = "#4f46e5"

@@ -1,23 +1,24 @@
 # 4 Digit Reaction Game
 
 A local multiplayer reaction game. A random 4-digit number appears on screen; each
-player has their own key. On each round, only some subset of players are "supposed"
-to press their key — figuring out whether you should press is the game. Points are
-scored based on how many players pressed.
+player has their own key. Pressing your key is the puzzle's "solve" action; the
+score you get for pressing depends on how fast you did it and where you ranked
+against the other players that round.
 
-There are two implementations of the same game living side by side in this repo:
+There are two implementations living side by side in this repo, and **they now
+use different scoring systems** (see below):
 
 - **`src/`** — the original desktop app (Python + Tkinter). Single process, no
-  network, run it and play immediately.
-- **`backend/` + `frontend/`** — a web version of the same game: a Flask REST API
-  holding the game state, and a Next.js UI that drives it. Built so the game can be
-  played in a browser instead of a native window.
+  network, run it and play immediately. Still uses the original simple scoring.
+- **`backend/` + `frontend/`** — a web version of the same round mechanic: a Flask
+  REST API holding the game state, and a Next.js UI that drives it. Uses the newer
+  per-player solve/speed/rank scoring described below.
 
-Both implementations share the same rules and the same round/score state machine —
-the web version is a faithful port of the desktop app's `App` class logic, not a
-from-scratch redesign.
+The web version started as a faithful port of the desktop app's `App` class, and
+the two still share the same screens, phases, and input bindings — only the
+scoring formula has diverged between them.
 
-## Game rules
+## Controls
 
 Players pick **2 Player** or **3 Player** mode, then enter their names. Each player
 is permanently bound to one input for the rest of the game:
@@ -28,20 +29,45 @@ is permanently bound to one input for the rest of the game:
 | Player 2 | `SHIFT` |
 | Player 3 (3-player mode only) | mouse click (anywhere that isn't a button) |
 
-Each round:
+Each round, a random 4-digit number is shown and the clock starts immediately
+(`SPACE` re-rolls the number, but only before anyone has pressed their key yet —
+it doesn't reset or pause the clock). Pressing your key is treated as "solving"
+the round — the round ends once every player has either pressed or the clock runs
+out, and then the score screen shows what everyone earned before the next round
+starts.
 
-1. A random 4-digit number is shown. Pressing `SPACE` re-rolls it, but only before
-   anyone has pressed their key yet.
-2. The first key/click press starts a 15-second countdown (`ROUND_TIME`).
-3. The round ends when either the countdown hits 0, or every input needed to
-   resolve the round has been pressed.
-4. Scoring:
-   - **2 Player:** if exactly one of the two players pressed, they score a point.
-     If both pressed, or neither pressed, the round is null.
-   - **3 Player:** if exactly two of the three players pressed, both of those two
-     score a point. Any other count (0, 1, or 3 presses) is a null round.
-5. On the score screen, each player re-presses their input to signal they're ready,
-   and once everyone is ready the next round starts automatically with a new number.
+### Desktop app scoring (`src/`, unchanged)
+
+15-second rounds. No individual points for pressing — instead:
+
+- **2 Player:** if exactly one of the two players pressed, they score 1 point.
+  If both pressed, or neither pressed, the round is null (no one scores).
+- **3 Player:** if exactly two of the three players pressed, both of those two
+  score 1 point. Any other count (0, 1, or 3 presses) is a null round.
+
+### Web app scoring (`backend/` + `frontend/`)
+
+90-second rounds (`ROUND_TIME_LIMIT` in `backend/scoring.py`). Every player is
+scored independently — nobody's points come out of anyone else's pool, and there's
+no "null round" that wipes everyone out. For each player:
+
+```
+round_score = solve_bonus + speed_bonus + rank_bonus
+```
+
+| Component | Rule |
+|---|---|
+| `solve_bonus` | `SOLVE_BONUS` (100) flat, if you pressed at all this round. 0 if you didn't. |
+| `speed_bonus` | `SPEED_BONUS_MAX * (1 - solve_time / ROUND_TIME_LIMIT)`, floored at 0, where `solve_time` is seconds elapsed since the round started (the puzzle was revealed) to your press — not since anyone else's press. Pressing right as the round starts earns the full 50; pressing right at the buzzer earns ~0. |
+| `rank_bonus` | `RANK_BONUS = [30, 15, 5]` handed out only to the players who pressed, ordered by how fast they were (fastest first). A player who didn't press gets no rank slot. |
+
+Not pressing (whether you'd call it "giving up" or "timing out" — there's no
+distinction) scores 0 for the round; it's still one of the game's rounds, it just
+contributes nothing.
+
+Both implementations show a ready-up step on the score screen: each player
+re-presses their input to signal they're ready, and once everyone has, the next
+round starts automatically with a new number.
 
 An **Admin Panel** (password-gated, see `ADMIN_PASSWORD` in the config files) is
 reachable from the score screen and lets you manually overwrite the scoreboard.
@@ -62,8 +88,9 @@ reachable from the score screen and lets you manually overwrite the scoreboard.
 │
 ├── backend/                # Flask REST API (web version's game state)
 │   ├── app.py                # Routes — thin wrappers around GameState
-│   ├── game_state.py         # GameState: the same state machine as src/ui/app.py
-│   ├── config.py             # Same constants as src/core/config.py
+│   ├── game_state.py         # GameState: round/score state machine (calls scoring.py)
+│   ├── scoring.py            # Pure per-player round scoring (solve/speed/rank bonuses)
+│   ├── config.py             # Colors + ADMIN_PASSWORD (round timing lives in scoring.py)
 │   └── requirements.txt
 │
 └── frontend/                # Next.js UI (web version's screens)
@@ -128,8 +155,8 @@ response. A `threading.Lock` in `app.py` serializes state mutations.
 | `POST /api/mode` | Pick `2p`/`3p`, moves to `name_entry` |
 | `POST /api/names` | Set player names, moves to `round` (generates first number) |
 | `POST /api/round/new-number` | SPACE — reroll the number (only pre-press) |
-| `POST /api/round/press` | Register a key/click for `enter`/`shift`/`mouse` |
-| `POST /api/round/timeout` | Countdown hit 0 — resolve the round with whatever was pressed |
+| `POST /api/round/press` | Register a key/click for `enter`/`shift`/`mouse`, timestamped server-side |
+| `POST /api/round/timeout` | Countdown hit 0 — score the round via `scoring.score_round()` from whoever pressed and when |
 | `POST /api/score/ready` | Mark a player ready on the score screen |
 | `POST /api/mode-select` | "Change Mode" — back to mode select (scores persist) |
 | `POST /api/admin/login` | Check the admin password |
@@ -149,11 +176,35 @@ The `AdminDialog` modal ignores the global key bindings while open (checked via 
 ref) so typing a password doesn't also register as a player's key press — the
 same isolation the desktop app gets for free from Tkinter's modal `grab_set()`.
 
+**Scoring** (`backend/scoring.py`). `score_round()` is a pure function — it takes
+a list of `PlayerRoundResult(player_id, solved, solve_time)` and returns each
+player's `PlayerRoundScore` (with the `solve_bonus`/`speed_bonus`/`rank_bonus`
+breakdown, plus a `round_score` total). It doesn't run a clock or decide when a
+round ends; `game_state.py` is what turns "player pressed `enter` at time T" into
+a `solve_time` (elapsed seconds since the round started) and feeds it in. All the
+tunable numbers (`ROUND_TIME_LIMIT`, `SOLVE_BONUS`, `SPEED_BONUS_MAX`,
+`RANK_BONUS`) live as constants at the top of that file — change the game's feel
+by editing those four values. Ties in `solve_time` are broken by input order, so
+`game_state.py` always passes players in the same `p1, p2, p3` order.
+
+`GameState._finish_round()` builds one `PlayerRoundResult` per active player from
+`self.clicks` (did they press?) and `self.press_times` (when?), calls
+`score_round()`, adds each player's `round_score` onto their running total, and
+stores the full breakdown in `last_round_scores` (included in every `/api/state`
+response) for the frontend to display or debug against.
+
 ## Notes
 
 - The web backend holds one global game session in memory — it resets on restart
   and isn't meant for multiple concurrent games.
-- Colors, `ROUND_TIME`, and `ADMIN_PASSWORD` are duplicated across
-  `src/core/config.py` and `backend/config.py` (there's no shared package between
-  the Python desktop app and the Python backend) — keep them in sync if you change
-  one.
+- Colors and `ADMIN_PASSWORD` are duplicated across `src/core/config.py` and
+  `backend/config.py` (there's no shared package between the Python desktop app
+  and the Python backend) — keep them in sync if you change one. Round timing is
+  *not* duplicated this way: the desktop app's 15s rounds live in
+  `src/core/config.py`, while the web app's 90s rounds live in
+  `backend/scoring.py` as `ROUND_TIME_LIMIT` — the two are intentionally
+  different now that their scoring models differ.
+- "Solving" in the web app currently just means pressing your key — there's no
+  real puzzle-submission flow yet (no target number, no digit-arithmetic
+  validation). `solve_time` is measured from the first press of the round, which
+  is an interim stand-in until an actual puzzle/answer-submission mechanic exists.

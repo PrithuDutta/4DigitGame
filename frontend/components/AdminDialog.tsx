@@ -15,9 +15,9 @@ export default function AdminDialog({ state, onClose, onScoresUpdated }: Props) 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const [p1, setP1] = useState(String(state.p1_score));
-  const [p2, setP2] = useState(String(state.p2_score));
-  const [p3, setP3] = useState(String(state.p3_score));
+  const [p1, setP1] = useState(state.p1_score.toFixed(1));
+  const [p2, setP2] = useState(state.p2_score.toFixed(1));
+  const [p3, setP3] = useState(state.p3_score.toFixed(1));
 
   const attemptLogin = async () => {
     const { ok } = await postAdminLogin(password);
@@ -31,8 +31,9 @@ export default function AdminDialog({ state, onClose, onScoresUpdated }: Props) 
   };
 
   const saveScores = async () => {
-    if (!/^-?\d+$/.test(p1) || !/^-?\d+$/.test(p2) || (state.mode === "3p" && !/^-?\d+$/.test(p3))) {
-      setError("Scores must be whole numbers.");
+    const isNumber = (v: string) => v.trim() !== "" && !Number.isNaN(Number(v));
+    if (!isNumber(p1) || !isNumber(p2) || (state.mode === "3p" && !isNumber(p3))) {
+      setError("Scores must be numbers.");
       return;
     }
     const next = await postAdminScores(Number(p1), Number(p2), Number(p3));

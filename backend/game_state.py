@@ -1,7 +1,8 @@
 import secrets
 import time
 
-from config import ROUND_TIME, ADMIN_PASSWORD
+from config import ADMIN_PASSWORD
+from scoring import PlayerRoundResult, ROUND_TIME_LIMIT, score_round
 
 
 def generate_4digit_number():
@@ -24,10 +25,13 @@ class GameState:
         self.number = "0000"
         self.round_started = False
         self.clicks = {"enter": False, "shift": False, "mouse": False}
+        self.round_start_ts = None
+        self.press_times = {"enter": None, "shift": None, "mouse": None}
         self.deadline_ts = None
 
         self.score_message = ""
         self.last_number = ""
+        self.last_round_scores = {}
         self.ready = {"enter": False, "shift": False, "mouse": False}
 
     # --- transitions ---
@@ -56,25 +60,28 @@ class GameState:
     def _start_round(self):
         self.phase = "round"
         self.number = generate_4digit_number()
-        self.round_started = False
         self.clicks = {"enter": False, "shift": False, "mouse": False}
-        self.deadline_ts = None
+        self.press_times = {"enter": None, "shift": None, "mouse": None}
+
+        # The 90s clock starts the instant the puzzle is revealed, not on the
+        # first press — solve_time has to be measured against a fixed origin
+        # or the first presser's own time would trivially be ~0.
+        now = time.time()
+        self.round_start_ts = now
+        self.deadline_ts = now + ROUND_TIME_LIMIT
+        self.round_started = True
 
     def new_number(self):
-        if self.phase == "round" and not self.round_started:
+        if self.phase == "round" and not any(self.clicks.values()):
             self.number = generate_4digit_number()
 
     def press(self, key):
-        if self.phase != "round" or key not in self.clicks:
+        if self.phase != "round" or key not in self.clicks or self.clicks[key]:
             return
 
         self.clicks[key] = True
-
-        if not self.round_started:
-            self.round_started = True
-            self.deadline_ts = time.time() + ROUND_TIME
-        else:
-            self._maybe_finish()
+        self.press_times[key] = time.time()
+        self._maybe_finish()
 
     def timeout(self):
         if self.phase == "round" and self.round_started:
@@ -87,41 +94,41 @@ class GameState:
         if all(self.clicks[k] for k in self._required_keys()):
             self._finish_round()
 
+    def _key_player_pairs(self):
+        pairs = [("p1", "enter"), ("p2", "shift")]
+        if self.mode == "3p":
+            pairs.append(("p3", "mouse"))
+        return pairs
+
     def _finish_round(self):
         self.deadline_ts = None
 
-        if self.mode == "2p":
-            entered = self.clicks["enter"]
-            shifted = self.clicks["shift"]
+        results = []
+        for player_id, key in self._key_player_pairs():
+            solved = self.clicks[key]
+            solve_time = (self.press_times[key] - self.round_start_ts) if solved else None
+            results.append(PlayerRoundResult(player_id=player_id, solved=solved, solve_time=solve_time))
 
-            if entered and not shifted:
-                self.p1_score += 1
-                self.score_message = f"POINT: {self.p1_name}"
-            elif shifted and not entered:
-                self.p2_score += 1
-                self.score_message = f"POINT: {self.p2_name}"
-            else:
-                self.score_message = "ROUND NULL"
+        scores = score_round(results)
+        names = {"p1": self.p1_name, "p2": self.p2_name, "p3": self.p3_name}
+
+        self.last_round_scores = {}
+        for s in scores:
+            attr = f"{s.player_id}_score"
+            setattr(self, attr, getattr(self, attr) + s.round_score)
+            self.last_round_scores[s.player_id] = {
+                "solve_bonus": s.solve_bonus,
+                "speed_bonus": s.speed_bonus,
+                "rank_bonus": s.rank_bonus,
+                "round_score": s.round_score,
+            }
+
+        solvers = sorted((s for s in scores if s.solve_bonus > 0), key=lambda s: -s.rank_bonus)
+        if solvers:
+            parts = [f"{names[s.player_id]} +{s.round_score:.0f}" for s in solvers]
+            self.score_message = "SOLVED: " + ", ".join(parts)
         else:
-            enter_c = self.clicks["enter"]
-            shift_c = self.clicks["shift"]
-            mouse_c = self.clicks["mouse"]
-            clicked_count = sum([enter_c, shift_c, mouse_c])
-
-            if clicked_count == 2:
-                winners = []
-                if enter_c:
-                    self.p1_score += 1
-                    winners.append(self.p1_name)
-                if shift_c:
-                    self.p2_score += 1
-                    winners.append(self.p2_name)
-                if mouse_c:
-                    self.p3_score += 1
-                    winners.append(self.p3_name)
-                self.score_message = f"POINTS: {' & '.join(winners)}"
-            else:
-                self.score_message = "ROUND NULL (No Points)"
+            self.score_message = "NO SOLVES THIS ROUND"
 
         self.last_number = self.number
         self.ready = {"enter": False, "shift": False, "mouse": False}
@@ -145,10 +152,10 @@ class GameState:
         return password == ADMIN_PASSWORD
 
     def admin_set_scores(self, p1_score, p2_score, p3_score):
-        self.p1_score = int(p1_score)
-        self.p2_score = int(p2_score)
+        self.p1_score = float(p1_score)
+        self.p2_score = float(p2_score)
         if self.mode == "3p":
-            self.p3_score = int(p3_score)
+            self.p3_score = float(p3_score)
 
     # --- serialization ---
 
@@ -156,7 +163,7 @@ class GameState:
         return {
             "phase": self.phase,
             "mode": self.mode,
-            "round_time": ROUND_TIME,
+            "round_time": ROUND_TIME_LIMIT,
             "p1_name": self.p1_name,
             "p2_name": self.p2_name,
             "p3_name": self.p3_name,
@@ -171,5 +178,6 @@ class GameState:
             },
             "score_message": self.score_message,
             "last_number": self.last_number,
+            "last_round_scores": dict(self.last_round_scores),
             "ready": dict(self.ready),
         }

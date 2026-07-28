@@ -13,10 +13,12 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode }: Props)
     ? `✓ ${state.p3_name.toUpperCase()} ready`
     : "Waiting for Click...";
 
+  const fmt = (n: number) => n.toFixed(1);
+
   const scoreLine =
     state.mode === "3p"
-      ? `${state.p1_name}: ${state.p1_score}  |  ${state.p2_name}: ${state.p2_score}  |  ${state.p3_name}: ${state.p3_score}`
-      : `${state.p1_name}: ${state.p1_score}   |   ${state.p2_name}: ${state.p2_score}`;
+      ? `${state.p1_name}: ${fmt(state.p1_score)}  |  ${state.p2_name}: ${fmt(state.p2_score)}  |  ${state.p3_name}: ${fmt(state.p3_score)}`
+      : `${state.p1_name}: ${fmt(state.p1_score)}   |   ${state.p2_name}: ${fmt(state.p2_score)}`;
 
   return (
     <div className="flex flex-1 items-center justify-center">

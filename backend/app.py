@@ -6,9 +6,9 @@ from flask_cors import CORS
 from config import (
     BG_DARK, BG_CARD, ACCENT_BLUE, ACCENT_BLUE_HOVER,
     TEXT_MAIN, TEXT_MUTED, TEXT_DIM, COLOR_GOLD, COLOR_ERROR, COLOR_SUCCESS,
-    ROUND_TIME,
 )
 from game_state import GameState
+from scoring import ROUND_TIME_LIMIT
 
 app = Flask(__name__)
 CORS(app)
@@ -24,7 +24,7 @@ def state_response():
 @app.get("/api/config")
 def get_config():
     return jsonify({
-        "round_time": ROUND_TIME,
+        "round_time": ROUND_TIME_LIMIT,
         "colors": {
             "bg_dark": BG_DARK,
             "bg_card": BG_CARD,
@@ -126,7 +126,7 @@ def post_admin_scores():
                 data.get("p3_score", 0),
             )
         except (TypeError, ValueError):
-            return jsonify({"error": "Scores must be whole numbers."}), 400
+            return jsonify({"error": "Scores must be numbers."}), 400
     return state_response()
 
 

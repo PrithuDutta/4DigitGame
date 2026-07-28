@@ -1,5 +1,5 @@
 import tkinter as tk
-from src.core.config import BG_DARK, BG_CARD, ACCENT_BLUE, ACCENT_BLUE_HOVER, TEXT_MAIN, TEXT_MUTED, COLOR_ERROR, ADMIN_PASSWORD
+from src.core.config import BG_DARK, BG_CARD, ACCENT_BLUE, ACCENT_BLUE_HOVER, TEXT_MAIN, TEXT_MUTED, COLOR_ERROR, ADMIN_PASSWORD, FONT_FAMILY
 
 class AdminDialog(tk.Toplevel):
     def __init__(self, parent, controller):
@@ -18,23 +18,23 @@ class AdminDialog(tk.Toplevel):
         self.geometry(f"{dw}x{dh}+{rx}+{ry}")
 
         tk.Label(self, text="Enter Admin Password",
-                 font=("Segoe UI", 10, "bold"), bg=BG_DARK, fg=TEXT_MUTED).pack(pady=(20, 8))
+                 font=(FONT_FAMILY, 10, "bold"), bg=BG_DARK, fg=TEXT_MUTED).pack(pady=(20, 8))
 
         self.pw_var = tk.StringVar()
         entry = tk.Entry(self, textvariable=self.pw_var, show="•",
-                         font=("Segoe UI", 12), bg=BG_CARD, fg=TEXT_MAIN,
+                         font=(FONT_FAMILY, 12), bg=BG_CARD, fg=TEXT_MAIN,
                          insertbackground=TEXT_MAIN, relief="flat", width=18, justify="center")
         entry.pack(ipady=6)
         entry.focus_set()
 
-        self.error_label = tk.Label(self, text="", font=("Segoe UI", 9),
+        self.error_label = tk.Label(self, text="", font=(FONT_FAMILY, 9),
                                bg=BG_DARK, fg=COLOR_ERROR)
         self.error_label.pack(pady=(4, 0))
 
         entry.bind("<Return>", self.attempt)
         
         btn = tk.Button(self, text="Unlock", command=self.attempt,
-                  font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg="white",
+                  font=(FONT_FAMILY, 9, "bold"), bg=ACCENT_BLUE, fg="white",
                   relief="flat", padx=16, pady=6, cursor="hand2",
                   activebackground=ACCENT_BLUE_HOVER, activeforeground="white")
         btn.pack(pady=(8, 0))
@@ -63,7 +63,7 @@ class ScoreEditorDialog(tk.Toplevel):
         ry = parent.winfo_y() + (parent.winfo_height() - dh) // 2
         self.geometry(f"{dw}x{dh}+{rx}+{ry}")
 
-        tk.Label(self, text="EDIT SCORES", font=("Segoe UI", 10, "bold"),
+        tk.Label(self, text="EDIT SCORES", font=(FONT_FAMILY, 10, "bold"),
                  bg=BG_DARK, fg=TEXT_MUTED).pack(pady=(20, 12))
 
         fields = tk.Frame(self, bg=BG_DARK)
@@ -78,20 +78,20 @@ class ScoreEditorDialog(tk.Toplevel):
             score_rows.append((self.controller.p3_name, self.p3_var))
 
         for row, (name, var) in enumerate(score_rows):
-            tk.Label(fields, text=f"{name}:", font=("Segoe UI", 10, "bold"),
+            tk.Label(fields, text=f"{name}:", font=(FONT_FAMILY, 10, "bold"),
                      bg=BG_DARK, fg=TEXT_MUTED, width=8, anchor="e").grid(
                          row=row, column=0, padx=(0, 8), pady=6)
-            tk.Entry(fields, textvariable=var, font=("Segoe UI", 11),
+            tk.Entry(fields, textvariable=var, font=(FONT_FAMILY, 11),
                      bg=BG_CARD, fg=TEXT_MAIN, insertbackground=TEXT_MAIN,
                      relief="flat", width=8, justify="center").grid(
                          row=row, column=1, ipady=5)
 
-        self.error_label = tk.Label(self, text="", font=("Segoe UI", 9),
+        self.error_label = tk.Label(self, text="", font=(FONT_FAMILY, 9),
                                bg=BG_DARK, fg=COLOR_ERROR)
         self.error_label.pack(pady=(4, 0))
 
         tk.Button(self, text="Save Changes", command=self.save,
-                  font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg="white",
+                  font=(FONT_FAMILY, 9, "bold"), bg=ACCENT_BLUE, fg="white",
                   relief="flat", padx=16, pady=6, cursor="hand2",
                   activebackground=ACCENT_BLUE_HOVER, activeforeground="white").pack(pady=(4, 0))
 

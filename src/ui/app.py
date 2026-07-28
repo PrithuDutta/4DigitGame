@@ -160,6 +160,12 @@ class App:
             return
 
         if self.round_screen.winfo_ismapped():
+<<<<<<< Updated upstream
+=======
+            if self.mode == "2p" and self.clicks["enter"]:
+                return
+
+>>>>>>> Stashed changes
             self.clicks["enter"] = True
             self.round_screen.p1_ind.config(fg="#10b981")
             self.start_timer()
@@ -171,6 +177,12 @@ class App:
             return
 
         if self.round_screen.winfo_ismapped():
+<<<<<<< Updated upstream
+=======
+            if self.mode == "2p" and self.clicks["shift"]:
+                return
+
+>>>>>>> Stashed changes
             self.clicks["shift"] = True
             self.round_screen.p2_ind.config(fg="#10b981")
             self.start_timer()

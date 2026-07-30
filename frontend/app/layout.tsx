@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Reaction Game",
-  description: "4-digit reaction game",
+  title: "4-DIGIT REACTION | Cyber Arcade Math",
+  description: "Fast-paced competitive 4-digit math reaction game",
 };
 
 export default function RootLayout({
@@ -12,8 +12,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full antialiased dark">
+      <body className="min-h-full flex flex-col bg-[var(--bg-dark)] text-[var(--text-main)] font-[var(--font-ui)] selection:bg-indigo-500 selection:text-white">
+        {children}
+      </body>
     </html>
   );
 }

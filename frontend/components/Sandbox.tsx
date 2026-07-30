@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSandboxPuzzle } from "@/lib/api";
 import type { BinaryOpKind, UnaryOpKind } from "@/lib/sandboxMath";
 import {
@@ -16,7 +16,7 @@ import {
 const TARGET = 10;
 const BINARY_OPS: BinaryOpKind[] = ["+", "-", "*", "/", "^", "root"];
 const UNARY_OPS: UnaryOpKind[] = ["sqrt", "!"];
-const REQUIRED_SLOTS = 2;
+const BUFFER_TIMEOUT_MS = 800;
 
 interface Tile {
   id: number;
@@ -47,19 +47,27 @@ export default function Sandbox({ onExit }: Props) {
   const [initialTiles, setInitialTiles] = useState<Tile[] | null>(null);
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [selectedTileIds, setSelectedTileIds] = useState<number[]>([]);
   const [activeOp, setActiveOp] = useState<BinaryOpKind | null>(null);
-  const [staged, setStaged] = useState<Tile[]>([]);
-  const [selectedTileId, setSelectedTileId] = useState<number | null>(null);
+  const [typedBuffer, setTypedBuffer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const nextIdRef = useRef(0);
+  const typedBufferRef = useRef("");
+  const bufferTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Only ever mutates state inside a promise callback, never synchronously,
-  // so this is safe to call from an effect body (unlike setLoading/setLoadError,
-  // which are fine from event handlers but not from a mount effect).
-  const fetchPuzzle = () =>
+  const clearTypedBuffer = useCallback(() => {
+    if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+    typedBufferRef.current = "";
+    setTypedBuffer("");
+  }, []);
+
+  const fetchPuzzle = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    clearTypedBuffer();
     getSandboxPuzzle()
       .then((data) => {
         const fresh = data.digits.map((d, i) => ({ id: i, value: d }));
@@ -67,98 +75,161 @@ export default function Sandbox({ onExit }: Props) {
         setInitialTiles(fresh);
         setTiles(fresh);
         setHistory([]);
+        setSelectedTileIds([]);
         setActiveOp(null);
-        setStaged([]);
-        setSelectedTileId(null);
         setError(null);
       })
       .catch(() => setLoadError("Could not load a puzzle. Try again."))
       .finally(() => setLoading(false));
-
-  const loadPuzzle = () => {
-    setLoading(true);
-    setLoadError(null);
-    fetchPuzzle();
-  };
+  }, [clearTypedBuffer]);
 
   useEffect(() => {
     fetchPuzzle();
-  }, []);
+  }, [fetchPuzzle]);
 
   const isWon = tiles.length === 1 && isWithinTolerance(tiles[0].value, TARGET);
-  const availableTiles = tiles.filter((t) => !staged.some((s) => s.id === t.id));
 
-  const handleTileTap = (tile: Tile) => {
-    setError(null);
-    if (activeOp) {
-      if (staged.length >= REQUIRED_SLOTS) return;
-      setStaged((s) => [...s, tile]);
-    } else {
-      setSelectedTileId((cur) => (cur === tile.id ? null : tile.id));
-    }
-  };
+  // Helper to execute a binary calculation between two tiles
+  const commitBinary = useCallback(
+    (leftTile: Tile, rightTile: Tile, op: BinaryOpKind, currentTiles: Tile[]) => {
+      clearTypedBuffer();
+      const outcome = applyBinary(op, leftTile.value, rightTile.value);
+      if (!outcome.ok) {
+        setError(outcome.error);
+        setSelectedTileIds([]);
+        setActiveOp(null);
+        return;
+      }
 
-  const handleBinaryOpTap = (kind: BinaryOpKind) => {
-    setError(null);
-    if (activeOp === kind) {
-      setActiveOp(null);
-      setStaged([]);
-    } else {
-      setActiveOp(kind);
-      setStaged([]);
-      setSelectedTileId(null);
-    }
-  };
+      const result: Tile = { id: nextIdRef.current++, value: outcome.value };
+      const label = formatBinaryLabel(op, leftTile.value, rightTile.value, outcome.value);
 
-  const handleUnaryOpTap = (kind: UnaryOpKind) => {
-    setError(null);
-    if (selectedTileId === null) {
-      setError("Tap a tile first, then tap this to apply it.");
-      return;
-    }
-    const tile = tiles.find((t) => t.id === selectedTileId);
-    if (!tile) return;
-
-    const outcome = applyUnary(kind, tile.value);
-    if (!outcome.ok) {
-      setError(outcome.error);
-      return;
-    }
-
-    const result: Tile = { id: nextIdRef.current++, value: outcome.value };
-    const label = formatUnaryLabel(kind, tile.value, outcome.value);
-    setTiles((ts) => ts.map((t) => (t.id === tile.id ? result : t)));
-    setHistory((h) => [...h, { type: "unary", operand: tile, result, label }]);
-    setSelectedTileId(null);
-  };
-
-  const handleCommit = () => {
-    if (!activeOp || staged.length !== REQUIRED_SLOTS) return;
-    const [left, right] = staged;
-
-    const outcome = applyBinary(activeOp, left.value, right.value);
-    if (!outcome.ok) {
-      setError(outcome.error);
-      setStaged([]);
-      return;
-    }
-
-    const result: Tile = { id: nextIdRef.current++, value: outcome.value };
-    const label = formatBinaryLabel(activeOp, left.value, right.value, outcome.value);
-
-    setTiles((ts) => {
-      const leftIndex = ts.findIndex((t) => t.id === left.id);
-      const before = ts.slice(0, leftIndex).filter((t) => t.id !== right.id).length;
-      const withoutOperands = ts.filter((t) => t.id !== left.id && t.id !== right.id);
+      const leftIndex = currentTiles.findIndex((t) => t.id === leftTile.id);
+      const before = currentTiles.slice(0, leftIndex).filter((t) => t.id !== rightTile.id).length;
+      const withoutOperands = currentTiles.filter((t) => t.id !== leftTile.id && t.id !== rightTile.id);
       const insertAt = Math.min(before, withoutOperands.length);
-      return [...withoutOperands.slice(0, insertAt), result, ...withoutOperands.slice(insertAt)];
-    });
-    setHistory((h) => [...h, { type: "binary", operands: [left, right], result, label }]);
-    setActiveOp(null);
-    setStaged([]);
-  };
 
-  const handleUndo = () => {
+      const nextTiles = [
+        ...withoutOperands.slice(0, insertAt),
+        result,
+        ...withoutOperands.slice(insertAt),
+      ];
+
+      setTiles(nextTiles);
+      setHistory((h) => [...h, { type: "binary", operands: [leftTile, rightTile], result, label }]);
+      setSelectedTileIds([]);
+      setActiveOp(null);
+      setError(null);
+    },
+    [clearTypedBuffer]
+  );
+
+  // Tap handler for tiles
+  const handleTileTap = useCallback(
+    (tile: Tile) => {
+      setError(null);
+
+      // Deselect if already selected
+      if (selectedTileIds.includes(tile.id)) {
+        setSelectedTileIds((ids) => ids.filter((id) => id !== tile.id));
+        return;
+      }
+
+      const nextSelectedIds = [...selectedTileIds, tile.id];
+
+      // If we now have 2 selected tiles AND an active binary operation -> AUTO-COMMIT IMMEDIATELY!
+      if (nextSelectedIds.length === 2 && activeOp) {
+        const left = tiles.find((t) => t.id === nextSelectedIds[0]);
+        const right = tiles.find((t) => t.id === nextSelectedIds[1]);
+        if (left && right) {
+          commitBinary(left, right, activeOp, tiles);
+          return;
+        }
+      }
+
+      if (nextSelectedIds.length > 2) {
+        setSelectedTileIds([tile.id]);
+      } else {
+        setSelectedTileIds(nextSelectedIds);
+      }
+    },
+    [selectedTileIds, activeOp, tiles, commitBinary]
+  );
+
+  // Commit any pending buffer if operator is pressed
+  const flushPendingBuffer = useCallback(() => {
+    if (typedBufferRef.current) {
+      const currentBuf = typedBufferRef.current;
+      clearTypedBuffer();
+      const match = tiles.find(
+        (t) => !selectedTileIds.includes(t.id) && formatValue(t.value) === currentBuf
+      );
+      if (match) {
+        handleTileTap(match);
+      }
+    }
+  }, [tiles, selectedTileIds, handleTileTap, clearTypedBuffer]);
+
+  // Tap handler for binary operations (+, -, *, /, ^, root)
+  const handleBinaryOpTap = useCallback(
+    (kind: BinaryOpKind) => {
+      flushPendingBuffer();
+      setError(null);
+
+      if (activeOp === kind && selectedTileIds.length < 2) {
+        setActiveOp(null);
+        return;
+      }
+
+      if (selectedTileIds.length === 2) {
+        const left = tiles.find((t) => t.id === selectedTileIds[0]);
+        const right = tiles.find((t) => t.id === selectedTileIds[1]);
+        if (left && right) {
+          commitBinary(left, right, kind, tiles);
+          return;
+        }
+      }
+
+      setActiveOp(kind);
+    },
+    [activeOp, selectedTileIds, tiles, commitBinary, flushPendingBuffer]
+  );
+
+  // Tap handler for unary operations (x!, sqrt)
+  const handleUnaryOpTap = useCallback(
+    (kind: UnaryOpKind) => {
+      flushPendingBuffer();
+      setError(null);
+
+      const targetId = selectedTileIds.length > 0 ? selectedTileIds[selectedTileIds.length - 1] : null;
+      if (targetId === null) {
+        setError("Tap or type a digit tile first to apply " + (kind === "!" ? "factorial (x!)" : "square root (√x)"));
+        return;
+      }
+
+      const tile = tiles.find((t) => t.id === targetId);
+      if (!tile) return;
+
+      const outcome = applyUnary(kind, tile.value);
+      if (!outcome.ok) {
+        setError(outcome.error);
+        return;
+      }
+
+      const result: Tile = { id: nextIdRef.current++, value: outcome.value };
+      const label = formatUnaryLabel(kind, tile.value, outcome.value);
+
+      setTiles((ts) => ts.map((t) => (t.id === tile.id ? result : t)));
+      setHistory((h) => [...h, { type: "unary", operand: tile, result, label }]);
+      setSelectedTileIds([]);
+      setActiveOp(null);
+      setError(null);
+    },
+    [selectedTileIds, tiles, flushPendingBuffer]
+  );
+
+  const handleUndo = useCallback(() => {
+    clearTypedBuffer();
     if (history.length === 0) return;
     setError(null);
     const last = history[history.length - 1];
@@ -168,44 +239,158 @@ export default function Sandbox({ onExit }: Props) {
     const restored = last.type === "unary" ? [last.operand] : last.operands;
 
     setTiles([...withoutResult.slice(0, idx), ...restored, ...withoutResult.slice(idx)]);
-    setHistory(history.slice(0, -1));
+    setHistory((h) => h.slice(0, -1));
     setActiveOp(null);
-    setStaged([]);
-    setSelectedTileId(null);
-  };
+    setSelectedTileIds([]);
+  }, [history, tiles, clearTypedBuffer]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
+    clearTypedBuffer();
     if (!initialTiles) return;
     setError(null);
     setTiles(initialTiles);
     setHistory([]);
     setActiveOp(null);
-    setStaged([]);
-    setSelectedTileId(null);
-  };
+    setSelectedTileIds([]);
+  }, [initialTiles, clearTypedBuffer]);
 
-  const renderStagingSlot = (index: number) => {
-    const tile = staged[index];
-    const isNext = staged.length === index;
+  // Backspace deletes typed buffer or pops last selected tile
+  const handleBackspace = useCallback(() => {
+    setError(null);
+    if (typedBufferRef.current) {
+      clearTypedBuffer();
+    } else if (selectedTileIds.length > 0) {
+      setSelectedTileIds((ids) => ids.slice(0, -1));
+    } else if (activeOp !== null) {
+      setActiveOp(null);
+    }
+  }, [selectedTileIds, activeOp, clearTypedBuffer]);
+
+  // Precise digit matcher: holds buffer open if prefix for larger tiles (e.g. 3 vs 35)
+  const matchTypedDigit = useCallback(
+    (digitChar: string) => {
+      setError(null);
+      if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+
+      const newBuffer = typedBufferRef.current + digitChar;
+      typedBufferRef.current = newBuffer;
+      setTypedBuffer(newBuffer);
+
+      const unselectedTiles = tiles.filter((t) => !selectedTileIds.includes(t.id));
+
+      const exactMatch = unselectedTiles.find((t) => formatValue(t.value) === newBuffer);
+      const isPrefixOfOther = unselectedTiles.some(
+        (t) => formatValue(t.value).startsWith(newBuffer) && formatValue(t.value) !== newBuffer
+      );
+
+      if (exactMatch && !isPrefixOfOther) {
+        // Unambiguous exact match (e.g. typed "35" or typed "7" when no "7x" tiles exist)
+        handleTileTap(exactMatch);
+        clearTypedBuffer();
+      } else if (isPrefixOfOther) {
+        // Ambiguous prefix (e.g. typed "3" when tile "35" exists)
+        // DO NOT select exactMatch yet! Wait for next digit or 800ms timeout.
+        bufferTimerRef.current = setTimeout(() => {
+          const pendingMatch = unselectedTiles.find(
+            (t) => formatValue(t.value) === typedBufferRef.current
+          );
+          if (pendingMatch) {
+            handleTileTap(pendingMatch);
+          }
+          clearTypedBuffer();
+        }, BUFFER_TIMEOUT_MS);
+      } else if (exactMatch) {
+        handleTileTap(exactMatch);
+        clearTypedBuffer();
+      } else {
+        // Invalid sequence -> auto clear buffer
+        bufferTimerRef.current = setTimeout(() => {
+          clearTypedBuffer();
+        }, BUFFER_TIMEOUT_MS);
+      }
+    },
+    [tiles, selectedTileIds, handleTileTap, clearTypedBuffer]
+  );
+
+  // Keyboard shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (/^[0-9]$/.test(e.key) || e.key === "." || e.key === ",") {
+        matchTypedDigit(e.key === "," ? "." : e.key);
+      } else if (e.key === "+" || e.key === "Add") {
+        handleBinaryOpTap("+");
+      } else if (e.key === "-" || e.key === "Subtract") {
+        handleBinaryOpTap("-");
+      } else if (e.key === "*" || e.key === "Multiply" || e.key === "x" || e.key === "X") {
+        handleBinaryOpTap("*");
+      } else if (e.key === "/" || e.key === "Divide") {
+        handleBinaryOpTap("/");
+      } else if (e.key === "^") {
+        handleBinaryOpTap("^");
+      } else if (e.key === "!") {
+        handleUnaryOpTap("!");
+      } else if (e.key === "s" || e.key === "S") {
+        handleUnaryOpTap("sqrt");
+      } else if (e.key === "Backspace") {
+        handleBackspace();
+      } else if (e.key === "z" || e.key === "Z") {
+        handleUndo();
+      } else if (e.key === "Escape" || e.key === "r" || e.key === "R") {
+        handleReset();
+      } else if (e.key === "n" || e.key === "N") {
+        fetchPuzzle();
+      } else if (e.key === " " || e.key === "Enter") {
+        flushPendingBuffer();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [matchTypedDigit, handleBinaryOpTap, handleUnaryOpTap, handleBackspace, handleUndo, handleReset, fetchPuzzle, flushPendingBuffer]);
+
+  // Staged formula preview string
+  const renderFormulaPreview = () => {
+    const firstTile = tiles.find((t) => t.id === selectedTileIds[0]);
+    const secondTile = tiles.find((t) => t.id === selectedTileIds[1]);
+
+    if (!firstTile && !activeOp) {
+      return (
+        <span className="text-slate-500 italic text-xs">
+          Tap or type numbers & operators to solve for {TARGET}
+        </span>
+      );
+    }
+
     return (
-      <span
-        key={index}
-        className="flex h-10 w-10 items-center justify-center rounded border text-sm font-bold"
-        style={{
-          background: tile ? "var(--bg-card)" : "transparent",
-          borderColor: isNext ? "var(--accent-blue)" : "#272735",
-          borderStyle: isNext ? "solid" : "dashed",
-          color: "var(--text-main)",
-        }}
-      >
-        {tile ? formatValue(tile.value) : ""}
-      </span>
+      <div className="flex items-center justify-center gap-2 font-mono text-sm font-bold text-white">
+        {firstTile ? (
+          <span className="rounded bg-indigo-500/20 px-2 py-0.5 border border-indigo-500/40 text-indigo-300">
+            {formatValue(firstTile.value)}
+          </span>
+        ) : (
+          <span className="rounded bg-slate-800 px-2 py-0.5 border border-slate-700 text-slate-500">?</span>
+        )}
+
+        <span className="text-cyan-400 font-bold">
+          {activeOp === "root" ? "√" : activeOp ? binarySymbol(activeOp) : "?"}
+        </span>
+
+        {secondTile ? (
+          <span className="rounded bg-indigo-500/20 px-2 py-0.5 border border-indigo-500/40 text-indigo-300">
+            {formatValue(secondTile.value)}
+          </span>
+        ) : (
+          <span className="rounded bg-slate-800 px-2 py-0.5 border border-slate-700 text-slate-500">?</span>
+        )}
+      </div>
     );
   };
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">
+      <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
         Loading puzzle...
       </div>
     );
@@ -214,13 +399,10 @@ export default function Sandbox({ onExit }: Props) {
   if (loadError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
-        <p className="text-sm" style={{ color: "var(--color-error)" }}>
-          {loadError}
-        </p>
+        <p className="text-sm text-rose-400">{loadError}</p>
         <button
-          className="rounded px-4 py-2 text-xs font-bold text-white"
-          style={{ background: "var(--accent-blue)" }}
-          onClick={loadPuzzle}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white"
+          onClick={fetchPuzzle}
         >
           Retry
         </button>
@@ -229,166 +411,150 @@ export default function Sandbox({ onExit }: Props) {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col items-center px-6 py-4">
-      <button
-        className="absolute left-6 top-5 rounded px-3 py-1 text-xs font-bold text-[var(--text-muted)]"
-        style={{ background: "var(--bg-card)" }}
-        onClick={onExit}
-      >
-        Exit
-      </button>
+    <div className="relative flex flex-1 flex-col items-center p-4 max-w-lg mx-auto w-full">
+      {/* Top Header */}
+      <div className="flex w-full items-center justify-between mb-4">
+        <button
+          onClick={onExit}
+          className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
+        >
+          ← Exit
+        </button>
 
-      <p className="mt-9 mb-1 text-xs font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
-        SANDBOX
-      </p>
-      <p className="mb-4 text-sm font-bold" style={{ color: "var(--color-gold)" }}>
-        Target: {TARGET}
-      </p>
+        <p className="text-sm font-bold text-white">SOLO SANDBOX</p>
+
+        <div className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+          TARGET: {TARGET}
+        </div>
+      </div>
 
       {isWon && (
-        <p className="mb-3 text-sm font-bold" style={{ color: "var(--color-success)" }}>
-          🎉 Solved! {formatValue(tiles[0].value)} = {TARGET}
-        </p>
-      )}
-
-      {/* Tiles */}
-      <div className="mb-4 flex flex-wrap justify-center gap-2">
-        {availableTiles.map((tile) => (
-          <button
-            key={tile.id}
-            onClick={() => handleTileTap(tile)}
-            className="flex h-14 w-14 items-center justify-center rounded border font-mono text-lg font-bold"
-            style={{
-              background: selectedTileId === tile.id ? "var(--accent-blue)" : "var(--bg-card)",
-              borderColor: selectedTileId === tile.id ? "var(--accent-blue-hover)" : "#272735",
-              color: "var(--text-main)",
-            }}
-          >
-            {formatValue(tile.value)}
-          </button>
-        ))}
-      </div>
-
-      {/* Binary operation buttons */}
-      <div className="mb-2 flex flex-wrap justify-center gap-1.5">
-        {BINARY_OPS.map((kind) => (
-          <button
-            key={kind}
-            onClick={() => handleBinaryOpTap(kind)}
-            className="flex h-10 w-10 items-center justify-center rounded text-sm font-bold"
-            style={{
-              background: activeOp === kind ? "var(--accent-blue)" : "var(--bg-card)",
-              color: activeOp === kind ? "white" : "var(--text-main)",
-            }}
-          >
-            {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
-          </button>
-        ))}
-      </div>
-
-      {/* Unary operation buttons */}
-      <div className="mb-4 flex justify-center gap-1.5">
-        {UNARY_OPS.map((kind) => (
-          <button
-            key={kind}
-            onClick={() => handleUnaryOpTap(kind)}
-            className="flex h-9 w-16 items-center justify-center rounded text-xs font-bold"
-            style={{ background: "var(--bg-card)", color: "var(--text-main)" }}
-          >
-            {kind === "!" ? "x!" : "√x"}
-          </button>
-        ))}
-      </div>
-
-      {/* Staging area */}
-      {activeOp && (
-        <div className="mb-3 flex items-center gap-2 rounded border p-3" style={{ borderColor: "#272735" }}>
-          {activeOp === "root" ? (
-            <div className="flex items-end gap-1">
-              <div className="flex flex-col items-center">
-                <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-                  degree
-                </span>
-                {renderStagingSlot(0)}
-              </div>
-              <span className="mb-1 text-xl" style={{ color: "var(--text-main)" }}>
-                √
-              </span>
-              <div className="flex flex-col items-center">
-                <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-                  radicand
-                </span>
-                {renderStagingSlot(1)}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              {renderStagingSlot(0)}
-              <span className="text-lg font-bold" style={{ color: "var(--text-main)" }}>
-                {binarySymbol(activeOp)}
-              </span>
-              {renderStagingSlot(1)}
-            </div>
-          )}
-
-          <button
-            onClick={handleCommit}
-            disabled={staged.length !== REQUIRED_SLOTS}
-            className="ml-2 rounded px-3 py-2 text-xs font-bold text-white disabled:opacity-30"
-            style={{ background: "var(--accent-blue)" }}
-          >
-            Enter
-          </button>
+        <div className="w-full mb-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-center">
+          <p className="font-mono text-sm font-bold text-emerald-300">
+            🎉 Solved! {formatValue(tiles[0].value)} = {TARGET}
+          </p>
         </div>
       )}
 
-      {error && (
-        <p className="mb-3 text-xs" style={{ color: "var(--color-error)" }}>
-          {error}
+      {/* Formula Preview Bar & Typed Buffer Indicator */}
+      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2.5 px-4 mb-3 text-center min-h-[42px] flex items-center justify-between">
+        <div className="flex-1 flex justify-center">{renderFormulaPreview()}</div>
+        {typedBuffer && (
+          <span className="font-mono text-[10px] font-bold text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 animate-pulse">
+            Typed: &quot;{typedBuffer}&quot;
+          </span>
+        )}
+      </div>
+
+      {/* Digit Tiles Grid */}
+      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-4 mb-3 text-center">
+        <p className="mb-2.5 font-mono text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          TAP OR TYPE DIGIT TILES
         </p>
+
+        <div className="flex flex-wrap justify-center gap-3">
+          {tiles.map((tile) => {
+            const selectedIdx = selectedTileIds.indexOf(tile.id);
+            const isSelected = selectedIdx !== -1;
+
+            return (
+              <button
+                key={tile.id}
+                onClick={() => handleTileTap(tile)}
+                className={`relative flex h-14 w-14 items-center justify-center rounded-xl font-mono text-lg font-bold border transition-all duration-150 active:scale-95 ${
+                  isSelected
+                    ? "border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                    : "border-slate-700 bg-slate-900 text-white hover:border-slate-500"
+                }`}
+              >
+                {formatValue(tile.value)}
+                {isSelected && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 font-mono text-[10px] font-bold text-slate-950">
+                    {selectedIdx + 1}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Binary Operators Toolbar */}
+      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-3.5 mb-3 text-center">
+        <div className="flex flex-wrap justify-center gap-2">
+          {BINARY_OPS.map((kind) => {
+            const isActive = activeOp === kind;
+            return (
+              <button
+                key={kind}
+                onClick={() => handleBinaryOpTap(kind)}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl font-mono text-sm font-bold border transition-all active:scale-95 ${
+                  isActive
+                    ? "border-indigo-400 bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.4)]"
+                    : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unary Operators Toolbar */}
+        <div className="mt-3 flex justify-center gap-2 border-t border-[#202738] pt-3">
+          {UNARY_OPS.map((kind) => (
+            <button
+              key={kind}
+              onClick={() => handleUnaryOpTap(kind)}
+              className="flex h-9 px-3.5 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 font-mono text-xs font-bold text-slate-300 hover:text-purple-300 hover:border-purple-500/40 transition-colors"
+            >
+              {kind === "!" ? "x! (!)" : "√x (S)"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="w-full mb-3 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2 text-center text-xs font-semibold text-rose-300">
+          ⚠️ {error}
+        </div>
       )}
 
-      {/* Controls */}
-      <div className="mb-4 flex gap-1.5">
+      {/* Action Controls */}
+      <div className="flex gap-2 mb-3 w-full max-w-sm justify-center">
         <button
           onClick={handleUndo}
           disabled={history.length === 0}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[var(--text-muted)] disabled:opacity-30"
-          style={{ background: "var(--bg-card)" }}
+          className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 disabled:opacity-30 hover:text-white"
         >
-          Undo
+          ↺ Undo (Z)
         </button>
         <button
           onClick={handleReset}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[var(--text-muted)]"
-          style={{ background: "var(--bg-card)" }}
+          className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 hover:text-white"
         >
-          Reset
+          ⟲ Reset (R)
         </button>
         <button
-          onClick={loadPuzzle}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[#818cf8]"
-          style={{ background: "var(--bg-card)" }}
+          onClick={fetchPuzzle}
+          className="flex-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2 font-mono text-xs font-bold text-indigo-300 hover:bg-indigo-500/20"
         >
-          New Puzzle
+          ✨ New (N)
         </button>
       </div>
 
-      {/* History */}
+      {/* Step History */}
       {history.length > 0 && (
-        <div className="w-full max-w-xs">
-          <p className="mb-1 text-center text-[10px] font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
-            HISTORY
+        <div className="w-full max-w-sm rounded-xl border border-[#202738] bg-[#131722] p-3">
+          <p className="mb-1 text-center font-mono text-[10px] font-bold text-slate-500 uppercase">
+            CALCULATION HISTORY LOG
           </p>
-          <div
-            className="max-h-32 overflow-y-auto rounded border p-2 text-xs"
-            style={{ background: "var(--bg-card)", borderColor: "#272735" }}
-          >
+          <div className="max-h-28 overflow-y-auto font-mono text-xs text-slate-300">
             {history
               .slice()
               .reverse()
               .map((h, i) => (
-                <div key={history.length - i} className="py-0.5 text-center" style={{ color: "var(--text-main)" }}>
+                <div key={history.length - i} className="py-0.5 text-center">
                   {h.label}
                 </div>
               ))}

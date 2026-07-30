@@ -1,39 +1,66 @@
+"use client";
+
 interface Props {
   onSelect: (choice: "local" | "online") => void;
 }
 
 export default function LandingScreen({ onSelect }: Props) {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="flex w-full max-w-xs flex-col">
-        <h1 className="mb-1 text-center text-lg font-bold tracking-wide text-[var(--text-main)]">
-          4 DIGIT REACTION GAME
-        </h1>
-        <p className="mb-6 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-          Choose how you want to play
-        </p>
+    <div className="flex flex-1 items-center justify-center p-4">
+      <div className="flex w-full max-w-sm flex-col items-center">
+        {/* Game Title */}
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide text-white">
+            4-DIGIT REACTION
+          </h1>
+          <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+            Fast mental math reaction challenge
+          </p>
+        </div>
 
-        <button
-          className="mb-2 rounded px-5 py-3 text-sm font-bold text-white transition-colors"
-          style={{ background: "var(--accent-blue)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-blue-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent-blue)")}
-          onClick={() => onSelect("local")}
-        >
-          Play Locally
-          <span className="block text-xs font-normal opacity-80">Same device, shared keyboard</span>
-        </button>
+        {/* Mode Options */}
+        <div className="flex w-full flex-col gap-3">
+          <button
+            onClick={() => onSelect("local")}
+            className="group flex w-full flex-col items-start rounded-xl border border-[#202738] bg-[#131722] p-4 text-left transition-colors hover:border-indigo-500 hover:bg-[#1a2030]"
+          >
+            <div className="flex w-full items-center justify-between">
+              <span className="text-sm font-bold text-white group-hover:text-indigo-400">
+                Play Locally
+              </span>
+              <span className="font-mono text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                1-3 PLAYERS
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">Same device with shared keyboard</p>
+            <div className="mt-2.5 flex items-center gap-1.5 font-mono text-[10px] text-slate-400">
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300 border border-slate-700">
+                [ENTER]
+              </span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300 border border-slate-700">
+                [SHIFT]
+              </span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300 border border-slate-700">
+                [LMB]
+              </span>
+            </div>
+          </button>
 
-        <button
-          className="rounded px-5 py-3 text-sm font-bold text-[#818cf8] transition-colors"
-          style={{ background: "var(--bg-card)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#22223b")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-card)")}
-          onClick={() => onSelect("online")}
-        >
-          Play Online
-          <span className="block text-xs font-normal opacity-80">Room code, separate devices</span>
-        </button>
+          <button
+            onClick={() => onSelect("online")}
+            className="group flex w-full flex-col items-start rounded-xl border border-[#202738] bg-[#131722] p-4 text-left transition-colors hover:border-cyan-500 hover:bg-[#1a2030]"
+          >
+            <div className="flex w-full items-center justify-between">
+              <span className="text-sm font-bold text-white group-hover:text-cyan-400">
+                Play Online
+              </span>
+              <span className="font-mono text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                MULTIPLAYER
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">Room code across separate devices</p>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ from config import (
     FRONTEND_ORIGINS,
 )
 from extensions import socketio
-from game_state import GameState
+from game_state import GameState, generate_4digit_number
 from scoring import ROUND_TIME_LIMIT
 
 app = Flask(__name__)
@@ -62,8 +62,9 @@ def get_state():
 # not a state machine.
 @app.get("/api/sandbox/new-puzzle")
 def get_sandbox_puzzle():
-    number = str(secrets.randbelow(10000)).zfill(4)
-    return jsonify({"number": number, "digits": [int(d) for d in number]})
+    number_str = generate_4digit_number(difficulty=None)
+    digits = [int(d) for d in number_str if d.isdigit()]
+    return jsonify({"number": number_str, "digits": digits})
 
 
 @app.post("/api/difficulty")

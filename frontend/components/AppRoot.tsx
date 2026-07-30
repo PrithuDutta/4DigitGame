@@ -22,32 +22,27 @@ function getHasStoredSessionServer() {
 }
 
 export default function AppRoot() {
-  // useSyncExternalStore — not a useEffect — is the SSR-safe way to read a
-  // value that legitimately differs between server and client (there's no
-  // localStorage/window on the server). It avoids both a hydration mismatch
-  // and a setState-in-effect, unlike naively checking localStorage in a
-  // useState initializer or a mount effect.
   const hasStoredSession = useSyncExternalStore(
     subscribeToStorage,
     getHasStoredSession,
     getHasStoredSessionServer,
   );
 
-  // Explicit user navigation (picking a mode, hitting Back) always wins;
-  // until the user has chosen anything this session, a stored online
-  // session takes you straight back into OnlineGameApp's rejoin flow.
   const [explicitChoice, setExplicitChoice] = useState<Choice | null>(null);
   const choice: Choice = explicitChoice ?? (hasStoredSession ? "online" : "landing");
 
+  let content: React.ReactNode;
   if (choice === "local") {
-    // GameApp is untouched by online multiplayer — rendering it directly
-    // here keeps local mode byte-for-byte identical to before this feature.
-    return <GameApp />;
+    content = <GameApp />;
+  } else if (choice === "online") {
+    content = <OnlineGameApp onBackToLanding={() => setExplicitChoice("landing")} />;
+  } else {
+    content = <LandingScreen onSelect={setExplicitChoice} />;
   }
 
-  if (choice === "online") {
-    return <OnlineGameApp onBackToLanding={() => setExplicitChoice("landing")} />;
-  }
-
-  return <LandingScreen onSelect={setExplicitChoice} />;
+  return (
+    <div className="relative flex min-h-screen w-full flex-col bg-[var(--bg-dark)] text-[var(--text-main)]">
+      <div className="relative z-10 flex flex-1 flex-col">{content}</div>
+    </div>
+  );
 }

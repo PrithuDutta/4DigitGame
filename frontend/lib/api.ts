@@ -133,6 +133,16 @@ export function postAdminLogin(password: string) {
   return post<{ ok: boolean }>("/api/admin/login", { password });
 }
 
+export interface SandboxPuzzleDTO {
+  number: string;
+  digits: number[];
+}
+
 export function postAdminScores(p1_score: number, p2_score: number, p3_score: number) {
   return post<GameStateDTO>("/api/admin/scores", { p1_score, p2_score, p3_score });
 }
+
+export function getSandboxPuzzle() {
+  return get<SandboxPuzzleDTO>("/api/sandbox/new-puzzle");
+}
+

@@ -1,7 +1,7 @@
 import threading
 import time
 
-from game_state import GameState
+from game_state import GameState, ROUNDS_PER_GAME, generate_4digit_number
 
 SLOT_ORDER = ("p1", "p2", "p3")
 SLOT_TO_KEY = {"p1": "enter", "p2": "shift", "p3": "mouse"}
@@ -106,6 +106,7 @@ class Room(GameState):
         self.p3_score = 0.0
         self.round_number = 1
         self.round_history = []
+        self.game_numbers = [generate_4digit_number(self.difficulty) for _ in range(ROUNDS_PER_GAME)]
         self._start_round()
 
     def add_player(self, player_id, name, sid):

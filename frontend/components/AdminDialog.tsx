@@ -50,17 +50,20 @@ export default function AdminDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div
-        className="w-72 rounded p-6"
-        style={{ background: "var(--bg-dark)" }}
+        className="w-full max-w-xs rounded-2xl border border-slate-800 bg-[var(--bg-card-solid)] p-6 shadow-2xl"
         onKeyDown={(e) => e.stopPropagation()}
       >
         {stage === "login" ? (
           <>
-            <p className="mb-4 text-center text-sm font-bold" style={{ color: "var(--text-muted)" }}>
-              Enter Admin Password
+            <p className="mb-1 text-center font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-400">
+              SECURITY ACCESS
             </p>
+            <h3 className="mb-4 text-center text-lg font-extrabold text-white">
+              ADMIN CONTROL PANEL
+            </h3>
+
             <input
               type="password"
               autoFocus
@@ -69,25 +72,23 @@ export default function AdminDialog({
               onKeyDown={(e) => {
                 if (e.key === "Enter") attemptLogin();
               }}
-              className="w-full rounded px-3 py-2 text-center text-sm text-[var(--text-main)] outline-none"
-              style={{ background: "var(--bg-card)" }}
+              placeholder="Password"
+              className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-center text-sm font-semibold text-white outline-none focus:border-indigo-500"
             />
             {error && (
-              <p className="mt-2 text-center text-xs" style={{ color: "var(--color-error)" }}>
+              <p className="mt-2 text-center text-xs font-semibold text-rose-400">
                 {error}
               </p>
             )}
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-5 flex justify-center gap-2">
               <button
-                className="rounded px-4 py-2 text-xs font-bold text-white"
-                style={{ background: "var(--accent-blue)" }}
+                className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg"
                 onClick={attemptLogin}
               >
                 Unlock
               </button>
               <button
-                className="rounded px-4 py-2 text-xs font-bold text-[var(--text-muted)]"
-                style={{ background: "var(--bg-card)" }}
+                className="flex-1 rounded-xl border border-slate-800 bg-slate-900 py-2.5 text-xs font-bold text-slate-400"
                 onClick={onClose}
               >
                 Cancel
@@ -96,48 +97,50 @@ export default function AdminDialog({
           </>
         ) : (
           <>
-            <p className="mb-4 text-center text-sm font-bold" style={{ color: "var(--text-muted)" }}>
-              EDIT SCORES
+            <p className="mb-1 text-center font-mono text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+              OVERRIDE SCORES
             </p>
+            <h3 className="mb-4 text-center text-lg font-extrabold text-white">
+              EDIT MATCH SCORES
+            </h3>
 
-            {[
-              [state.p1_name, p1, setP1],
-              [state.p2_name, p2, setP2],
-              ...(state.mode === "3p" ? [[state.p3_name, p3, setP3] as const] : []),
-            ].map(([label, value, setValue], i) => (
-              <div key={i} className="mb-2 flex items-center gap-2">
-                <label className="w-20 shrink-0 text-right text-sm font-bold" style={{ color: "var(--text-muted)" }}>
-                  {label as string}:
-                </label>
-                <input
-                  value={value as string}
-                  onChange={(e) => (setValue as (v: string) => void)(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveScores();
-                  }}
-                  className="w-20 rounded px-2 py-1 text-center text-sm text-[var(--text-main)] outline-none"
-                  style={{ background: "var(--bg-card)" }}
-                />
-              </div>
-            ))}
+            <div className="flex flex-col gap-3">
+              {[
+                [state.p1_name, p1, setP1],
+                [state.p2_name, p2, setP2],
+                ...(state.mode === "3p" ? [[state.p3_name, p3, setP3] as const] : []),
+              ].map(([label, value, setValue], i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-300">
+                    {label as string}:
+                  </label>
+                  <input
+                    value={value as string}
+                    onChange={(e) => (setValue as (v: string) => void)(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveScores();
+                    }}
+                    className="w-24 rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-center font-mono text-sm font-bold text-amber-400 outline-none focus:border-indigo-500"
+                  />
+                </div>
+              ))}
+            </div>
 
             {error && (
-              <p className="mt-2 text-center text-xs" style={{ color: "var(--color-error)" }}>
+              <p className="mt-2 text-center text-xs font-semibold text-rose-400">
                 {error}
               </p>
             )}
 
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-5 flex justify-center gap-2">
               <button
-                className="rounded px-4 py-2 text-xs font-bold text-white"
-                style={{ background: "var(--accent-blue)" }}
+                className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg"
                 onClick={saveScores}
               >
-                Save Changes
+                Save
               </button>
               <button
-                className="rounded px-4 py-2 text-xs font-bold text-[var(--text-muted)]"
-                style={{ background: "var(--bg-card)" }}
+                className="flex-1 rounded-xl border border-slate-800 bg-slate-900 py-2.5 text-xs font-bold text-slate-400"
                 onClick={onClose}
               >
                 Cancel

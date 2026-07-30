@@ -20,10 +20,6 @@ export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSu
   const [localError, setLocalError] = useState("");
   const firstInputRef = useRef<HTMLInputElement>(null);
 
-  // GameApp only ever renders <NameScreen> while phase === "name_entry", so this
-  // mounts fresh each time the screen appears — no need to sync p1/p2/p3 from
-  // props via an effect, useState's initializer already picks up the current
-  // values at mount. Just autofocus the first field once mounted.
   useEffect(() => {
     firstInputRef.current?.focus();
   }, []);
@@ -42,9 +38,20 @@ export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSu
     onSubmit(t1, t2, t3);
   };
 
-  const row = (label: string, value: string, setValue: (v: string) => void, ref?: React.Ref<HTMLInputElement>) => (
-    <div className="mb-3 flex items-center">
-      <label className="w-36 shrink-0 text-xs font-bold text-[var(--text-muted)]">{label}</label>
+  const renderInputRow = (
+    label: string,
+    keycap: string,
+    value: string,
+    setValue: (v: string) => void,
+    ref?: React.Ref<HTMLInputElement>
+  ) => (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+        <span>{label}</span>
+        <span className="font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+          {keycap}
+        </span>
+      </div>
       <input
         ref={ref}
         value={value}
@@ -52,44 +59,43 @@ export default function NameScreen({ mode, initialP1, initialP2, initialP3, onSu
         onKeyDown={(e) => {
           if (e.key === "Enter") submit();
         }}
-        className="w-full rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none"
-        style={{ background: "var(--bg-card)" }}
+        className="w-full rounded-lg border border-[#202738] bg-[#131722] px-3.5 py-2 text-sm font-semibold text-white outline-none focus:border-indigo-500"
       />
     </div>
   );
 
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="w-full max-w-xs">
-        <h1 className="mb-5 text-center text-base font-bold tracking-wide text-[var(--text-main)]">
-          ENTER PLAYER NAMES
-        </h1>
+    <div className="flex flex-1 items-center justify-center p-4">
+      <div className="flex w-full max-w-xs flex-col items-center">
+        <div className="mb-6 text-center">
+          <h2 className="text-xl font-bold text-white">ENTER NAMES</h2>
+        </div>
 
-        {row("Player 1 [ENTER]", p1, setP1, firstInputRef)}
-        {row("Player 2 [SHIFT]", p2, setP2)}
-        {mode === "3p" && row("Player 3 [LMB]", p3, setP3)}
+        <div className="flex w-full flex-col gap-3">
+          {renderInputRow("Player 1", "[ENTER]", p1, setP1, firstInputRef)}
+          {renderInputRow("Player 2", "[SHIFT]", p2, setP2)}
+          {mode === "3p" && renderInputRow("Player 3", "[LMB]", p3, setP3)}
 
-        {(localError || error) && (
-          <p className="mt-1 text-center text-xs" style={{ color: "var(--color-error)" }}>
-            {localError || error}
-          </p>
-        )}
+          {(localError || error) && (
+            <p className="text-center text-xs text-rose-400">
+              {localError || error}
+            </p>
+          )}
 
-        <button
-          className="mt-4 w-full rounded px-5 py-3 text-sm font-bold text-white"
-          style={{ background: "var(--accent-blue)" }}
-          onClick={submit}
-        >
-          Start Game
-        </button>
+          <button
+            onClick={submit}
+            className="mt-2 w-full rounded-xl bg-indigo-600 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 transition-colors"
+          >
+            Start Game
+          </button>
 
-        <button
-          className="mt-2 w-full rounded px-5 py-3 text-sm font-bold text-[var(--text-muted)]"
-          style={{ background: "var(--bg-card)" }}
-          onClick={onExit}
-        >
-          Exit
-        </button>
+          <button
+            onClick={onExit}
+            className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2 text-xs font-semibold text-slate-400 hover:text-white"
+          >
+            Back
+          </button>
+        </div>
       </div>
     </div>
   );

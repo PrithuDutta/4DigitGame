@@ -1,3 +1,5 @@
+"use client";
+
 interface Props {
   onSelect: (mode: "2p" | "3p") => void;
   onSandbox: () => void;
@@ -5,41 +7,44 @@ interface Props {
 
 export default function ModeScreen({ onSelect, onSandbox }: Props) {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="flex w-full max-w-xs flex-col">
-        <h1 className="mb-5 text-center text-base font-bold tracking-wide text-[var(--text-main)]">
-          SELECT PLAYERS
-        </h1>
+    <div className="flex flex-1 items-center justify-center p-4">
+      <div className="flex w-full max-w-xs flex-col items-center">
+        <div className="mb-6 text-center">
+          <h2 className="text-xl font-bold text-white">SELECT PLAYERS</h2>
+        </div>
 
-        <button
-          className="mb-2 rounded px-5 py-3 text-sm font-bold text-white transition-colors"
-          style={{ background: "var(--accent-blue)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-blue-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent-blue)")}
-          onClick={() => onSelect("2p")}
-        >
-          2 Players
-        </button>
+        <div className="flex w-full flex-col gap-2.5">
+          <button
+            onClick={() => onSelect("2p")}
+            className="flex w-full items-center justify-between rounded-xl border border-[#202738] bg-[#131722] p-3.5 text-sm font-bold text-white transition-colors hover:border-indigo-500 hover:bg-[#1a2030]"
+          >
+            <span>2 Players</span>
+            <div className="flex gap-1 font-mono text-[10px] text-slate-400">
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 border border-slate-700">[ENTER]</span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 border border-slate-700">[SHIFT]</span>
+            </div>
+          </button>
 
-        <button
-          className="mb-2 rounded px-5 py-3 text-sm font-bold text-[#818cf8] transition-colors"
-          style={{ background: "var(--bg-card)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#22223b")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-card)")}
-          onClick={() => onSelect("3p")}
-        >
-          3 Players
-        </button>
+          <button
+            onClick={() => onSelect("3p")}
+            className="flex w-full items-center justify-between rounded-xl border border-[#202738] bg-[#131722] p-3.5 text-sm font-bold text-white transition-colors hover:border-cyan-500 hover:bg-[#1a2030]"
+          >
+            <span>3 Players</span>
+            <div className="flex gap-1 font-mono text-[10px] text-slate-400">
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 border border-slate-700">[ENTER]</span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 border border-slate-700">[SHIFT]</span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 border border-slate-700">[LMB]</span>
+            </div>
+          </button>
 
-        <button
-          className="rounded px-5 py-3 text-sm font-bold text-[var(--text-muted)] transition-colors"
-          style={{ background: "var(--bg-card)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#22223b")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-card)")}
-          onClick={onSandbox}
-        >
-          1 Player (Sandbox)
-        </button>
+          <button
+            onClick={onSandbox}
+            className="flex w-full items-center justify-between rounded-xl border border-[#202738] bg-[#131722] p-3.5 text-sm font-bold text-slate-300 transition-colors hover:border-purple-500 hover:bg-[#1a2030]"
+          >
+            <span>1 Player (Sandbox)</span>
+            <span className="font-mono text-[10px] text-purple-400">SOLO</span>
+          </button>
+        </div>
       </div>
     </div>
   );

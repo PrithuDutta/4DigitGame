@@ -56,9 +56,6 @@ export default function Sandbox({ onExit }: Props) {
 
   const nextIdRef = useRef(0);
 
-  // Only ever mutates state inside a promise callback, never synchronously,
-  // so this is safe to call from an effect body (unlike setLoading/setLoadError,
-  // which are fine from event handlers but not from a mount effect).
   const fetchPuzzle = () =>
     getSandboxPuzzle()
       .then((data) => {
@@ -190,13 +187,13 @@ export default function Sandbox({ onExit }: Props) {
     return (
       <span
         key={index}
-        className="flex h-10 w-10 items-center justify-center rounded border text-sm font-bold"
-        style={{
-          background: tile ? "var(--bg-card)" : "transparent",
-          borderColor: isNext ? "var(--accent-blue)" : "#272735",
-          borderStyle: isNext ? "solid" : "dashed",
-          color: "var(--text-main)",
-        }}
+        className={`flex h-10 w-10 items-center justify-center rounded-lg font-mono text-sm font-bold border ${
+          tile
+            ? "border-indigo-400 bg-indigo-500/20 text-white"
+            : isNext
+            ? "border-dashed border-cyan-400 bg-cyan-500/10 text-cyan-300"
+            : "border-dashed border-slate-700 bg-slate-900 text-slate-600"
+        }`}
       >
         {tile ? formatValue(tile.value) : ""}
       </span>
@@ -205,7 +202,7 @@ export default function Sandbox({ onExit }: Props) {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">
+      <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
         Loading puzzle...
       </div>
     );
@@ -214,12 +211,9 @@ export default function Sandbox({ onExit }: Props) {
   if (loadError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
-        <p className="text-sm" style={{ color: "var(--color-error)" }}>
-          {loadError}
-        </p>
+        <p className="text-sm text-rose-400">{loadError}</p>
         <button
-          className="rounded px-4 py-2 text-xs font-bold text-white"
-          style={{ background: "var(--accent-blue)" }}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white"
           onClick={loadPuzzle}
         >
           Retry
@@ -229,102 +223,105 @@ export default function Sandbox({ onExit }: Props) {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col items-center px-6 py-4">
-      <button
-        className="absolute left-6 top-5 rounded px-3 py-1 text-xs font-bold text-[var(--text-muted)]"
-        style={{ background: "var(--bg-card)" }}
-        onClick={onExit}
-      >
-        Exit
-      </button>
+    <div className="relative flex flex-1 flex-col items-center p-4 max-w-lg mx-auto w-full">
+      {/* Top Header */}
+      <div className="flex w-full items-center justify-between mb-4">
+        <button
+          onClick={onExit}
+          className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
+        >
+          ← Exit
+        </button>
 
-      <p className="mt-9 mb-1 text-xs font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
-        SANDBOX
-      </p>
-      <p className="mb-4 text-sm font-bold" style={{ color: "var(--color-gold)" }}>
-        Target: {TARGET}
-      </p>
+        <p className="text-sm font-bold text-white">SOLO SANDBOX</p>
+
+        <div className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+          TARGET: {TARGET}
+        </div>
+      </div>
 
       {isWon && (
-        <p className="mb-3 text-sm font-bold" style={{ color: "var(--color-success)" }}>
-          🎉 Solved! {formatValue(tiles[0].value)} = {TARGET}
-        </p>
+        <div className="w-full mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2.5 text-center">
+          <p className="font-mono text-sm font-bold text-emerald-300">
+            🎉 Solved! {formatValue(tiles[0].value)} = {TARGET}
+          </p>
+        </div>
       )}
 
       {/* Tiles */}
-      <div className="mb-4 flex flex-wrap justify-center gap-2">
-        {availableTiles.map((tile) => (
-          <button
-            key={tile.id}
-            onClick={() => handleTileTap(tile)}
-            className="flex h-14 w-14 items-center justify-center rounded border font-mono text-lg font-bold"
-            style={{
-              background: selectedTileId === tile.id ? "var(--accent-blue)" : "var(--bg-card)",
-              borderColor: selectedTileId === tile.id ? "var(--accent-blue-hover)" : "#272735",
-              color: "var(--text-main)",
-            }}
-          >
-            {formatValue(tile.value)}
-          </button>
-        ))}
+      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-4 mb-3 text-center">
+        <p className="mb-2.5 font-mono text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          DIGIT TILES
+        </p>
+
+        <div className="flex flex-wrap justify-center gap-2.5">
+          {availableTiles.map((tile) => {
+            const isSelected = selectedTileId === tile.id;
+            return (
+              <button
+                key={tile.id}
+                onClick={() => handleTileTap(tile)}
+                className={`flex h-12 w-12 items-center justify-center rounded-lg font-mono text-base font-bold border transition-colors ${
+                  isSelected
+                    ? "border-cyan-400 bg-cyan-500/20 text-cyan-300"
+                    : "border-slate-700 bg-slate-900 text-white hover:border-slate-500"
+                }`}
+              >
+                {formatValue(tile.value)}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Binary operation buttons */}
-      <div className="mb-2 flex flex-wrap justify-center gap-1.5">
-        {BINARY_OPS.map((kind) => (
-          <button
-            key={kind}
-            onClick={() => handleBinaryOpTap(kind)}
-            className="flex h-10 w-10 items-center justify-center rounded text-sm font-bold"
-            style={{
-              background: activeOp === kind ? "var(--accent-blue)" : "var(--bg-card)",
-              color: activeOp === kind ? "white" : "var(--text-main)",
-            }}
-          >
-            {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
-          </button>
-        ))}
+      {/* Binary Ops */}
+      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-3.5 mb-3 text-center">
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {BINARY_OPS.map((kind) => {
+            const isActive = activeOp === kind;
+            return (
+              <button
+                key={kind}
+                onClick={() => handleBinaryOpTap(kind)}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xs font-bold border ${
+                  isActive
+                    ? "border-indigo-400 bg-indigo-600 text-white"
+                    : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unary Ops */}
+        <div className="mt-2.5 flex justify-center gap-2 border-t border-[#202738] pt-2.5">
+          {UNARY_OPS.map((kind) => (
+            <button
+              key={kind}
+              onClick={() => handleUnaryOpTap(kind)}
+              className="flex h-8 px-3 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 font-mono text-xs font-bold text-slate-300 hover:text-white"
+            >
+              {kind === "!" ? "x!" : "√x"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Unary operation buttons */}
-      <div className="mb-4 flex justify-center gap-1.5">
-        {UNARY_OPS.map((kind) => (
-          <button
-            key={kind}
-            onClick={() => handleUnaryOpTap(kind)}
-            className="flex h-9 w-16 items-center justify-center rounded text-xs font-bold"
-            style={{ background: "var(--bg-card)", color: "var(--text-main)" }}
-          >
-            {kind === "!" ? "x!" : "√x"}
-          </button>
-        ))}
-      </div>
-
-      {/* Staging area */}
+      {/* Staging */}
       {activeOp && (
-        <div className="mb-3 flex items-center gap-2 rounded border p-3" style={{ borderColor: "#272735" }}>
+        <div className="w-full flex items-center justify-between gap-2 rounded-xl border border-indigo-500/40 bg-indigo-950/20 p-3 mb-3">
           {activeOp === "root" ? (
-            <div className="flex items-end gap-1">
-              <div className="flex flex-col items-center">
-                <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-                  degree
-                </span>
-                {renderStagingSlot(0)}
-              </div>
-              <span className="mb-1 text-xl" style={{ color: "var(--text-main)" }}>
-                √
-              </span>
-              <div className="flex flex-col items-center">
-                <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-                  radicand
-                </span>
-                {renderStagingSlot(1)}
-              </div>
+            <div className="flex items-end gap-1.5">
+              {renderStagingSlot(0)}
+              <span className="font-mono text-xl font-bold text-cyan-300">√</span>
+              {renderStagingSlot(1)}
             </div>
           ) : (
             <div className="flex items-center gap-2">
               {renderStagingSlot(0)}
-              <span className="text-lg font-bold" style={{ color: "var(--text-main)" }}>
+              <span className="font-mono text-base font-bold text-indigo-400">
                 {binarySymbol(activeOp)}
               </span>
               {renderStagingSlot(1)}
@@ -334,41 +331,35 @@ export default function Sandbox({ onExit }: Props) {
           <button
             onClick={handleCommit}
             disabled={staged.length !== REQUIRED_SLOTS}
-            className="ml-2 rounded px-3 py-2 text-xs font-bold text-white disabled:opacity-30"
-            style={{ background: "var(--accent-blue)" }}
+            className="rounded-lg bg-indigo-600 px-4 py-2 font-mono text-xs font-bold text-white disabled:opacity-30"
           >
-            Enter
+            ENTER
           </button>
         </div>
       )}
 
       {error && (
-        <p className="mb-3 text-xs" style={{ color: "var(--color-error)" }}>
-          {error}
-        </p>
+        <p className="mb-3 text-center text-xs text-rose-400">{error}</p>
       )}
 
-      {/* Controls */}
-      <div className="mb-4 flex gap-1.5">
+      {/* Toolbar */}
+      <div className="flex gap-2 mb-3">
         <button
           onClick={handleUndo}
           disabled={history.length === 0}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[var(--text-muted)] disabled:opacity-30"
-          style={{ background: "var(--bg-card)" }}
+          className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 font-mono text-xs font-bold text-slate-400 disabled:opacity-30"
         >
           Undo
         </button>
         <button
           onClick={handleReset}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[var(--text-muted)]"
-          style={{ background: "var(--bg-card)" }}
+          className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 font-mono text-xs font-bold text-slate-400"
         >
           Reset
         </button>
         <button
           onClick={loadPuzzle}
-          className="rounded px-3 py-1.5 text-xs font-bold text-[#818cf8]"
-          style={{ background: "var(--bg-card)" }}
+          className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 font-mono text-xs font-bold text-indigo-300"
         >
           New Puzzle
         </button>
@@ -376,19 +367,13 @@ export default function Sandbox({ onExit }: Props) {
 
       {/* History */}
       {history.length > 0 && (
-        <div className="w-full max-w-xs">
-          <p className="mb-1 text-center text-[10px] font-bold tracking-wide" style={{ color: "var(--text-dim)" }}>
-            HISTORY
-          </p>
-          <div
-            className="max-h-32 overflow-y-auto rounded border p-2 text-xs"
-            style={{ background: "var(--bg-card)", borderColor: "#272735" }}
-          >
+        <div className="w-full max-w-sm rounded-xl border border-[#202738] bg-[#131722] p-3">
+          <div className="max-h-28 overflow-y-auto font-mono text-xs text-slate-300">
             {history
               .slice()
               .reverse()
               .map((h, i) => (
-                <div key={history.length - i} className="py-0.5 text-center" style={{ color: "var(--text-main)" }}>
+                <div key={history.length - i} className="py-0.5 text-center">
                   {h.label}
                 </div>
               ))}

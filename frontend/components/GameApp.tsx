@@ -31,6 +31,8 @@ export default function GameApp() {
   // multiplayer phase machine — it's a separate local view, not a phase.
   const [showSandbox, setShowSandbox] = useState(false);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const seqRef = useRef(0);
   const stateRef = useRef<GameStateDTO | null>(null);
   const adminOpenRef = useRef(false);
@@ -40,11 +42,26 @@ export default function GameApp() {
     adminOpenRef.current = adminOpen;
   }, [state, adminOpen]);
 
-  useEffect(() => {
-    getState()
-      .then(setState)
-      .catch(() => {});
+  const fetchState = useCallback(() => {
+    return getState()
+      .then((s) => {
+        setState(s);
+        setFetchError(null);
+      })
+      .catch((err) => {
+        setFetchError(err.message || "Cannot connect to backend server at http://127.0.0.1:5000.");
+      });
   }, []);
+
+  useEffect(() => {
+    fetchState();
+    const timer = setInterval(() => {
+      if (!stateRef.current) {
+        fetchState();
+      }
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [fetchState]);
 
   const applyAction = useCallback((action: () => Promise<GameStateDTO>) => {
     const seq = ++seqRef.current;
@@ -132,8 +149,20 @@ export default function GameApp() {
 
   if (!state) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">
-        Loading...
+      <div className="flex min-h-screen flex-1 flex-col items-center justify-center gap-4 p-6 text-center text-[var(--text-muted)]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--accent-blue)] border-t-transparent"></div>
+        <p className="text-base font-semibold text-[var(--text-main)]">Connecting to Game Server...</p>
+        {fetchError && (
+          <p className="max-w-md text-xs text-[var(--color-error)] font-mono bg-red-950/40 p-3 rounded-lg border border-red-800/50">
+            {fetchError}
+          </p>
+        )}
+        <button
+          onClick={fetchState}
+          className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-blue-hover)]"
+        >
+          Retry Connection
+        </button>
       </div>
     );
   }

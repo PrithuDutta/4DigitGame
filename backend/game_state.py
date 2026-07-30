@@ -2,27 +2,66 @@ import secrets
 import time
 import json
 import os
+import sqlite3
 
 from config import ADMIN_PASSWORD
 from scoring import PlayerRoundResult, ROUND_TIME_LIMIT, score_round
 
 ROUNDS_PER_GAME = 10
 
-VALID_NUMBERS = {}
-try:
-    with open(os.path.join(os.path.dirname(__file__), 'valid_numbers.json'), 'r') as f:
-        VALID_NUMBERS = json.load(f)
-except Exception as e:
-    print("Warning: Could not load valid_numbers.json:", e)
+def load_valid_numbers_from_db():
+    db_path = os.path.join(os.path.dirname(__file__), 'game.db')
+    if not os.path.exists(db_path):
+        try:
+            from create_db import create_and_populate_db
+            create_and_populate_db()
+        except Exception as e:
+            print("Warning: Could not automatically create game.db:", e)
+            return {}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT difficulty, number_string FROM valid_pools;")
+        rows = cursor.fetchall()
+        conn.close()
+
+        pools = {"easy": [], "hard": []}
+        for diff, num_str in rows:
+            if diff in pools:
+                pools[diff].append(num_str)
+        return pools
+    except Exception as e:
+        print("Warning: Could not load valid numbers from game.db:", e)
+        return {}
+
+VALID_NUMBERS = load_valid_numbers_from_db()
 
 def generate_4digit_number(difficulty):
     if difficulty == "easy" and "easy" in VALID_NUMBERS and VALID_NUMBERS["easy"]:
         pool = VALID_NUMBERS["easy"]
-    elif "easy" in VALID_NUMBERS and "hard" in VALID_NUMBERS:
-        pool = VALID_NUMBERS["easy"] + VALID_NUMBERS["hard"]
+    elif ("easy" in VALID_NUMBERS or "hard" in VALID_NUMBERS) and (VALID_NUMBERS.get("easy") or VALID_NUMBERS.get("hard")):
+        pool = VALID_NUMBERS.get("easy", []) + VALID_NUMBERS.get("hard", [])
     else:
-        return str(secrets.randbelow(10000)).zfill(4)
+        db_path = os.path.join(os.path.dirname(__file__), 'game.db')
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                if difficulty == "easy":
+                    cursor.execute("SELECT number_string FROM valid_pools WHERE difficulty = 'easy' ORDER BY RANDOM() LIMIT 1;")
+                else:
+                    cursor.execute("SELECT number_string FROM valid_pools ORDER BY RANDOM() LIMIT 1;")
+                row = cursor.fetchone()
+                conn.close()
+                if row and row[0]:
+                    return row[0]
+            except Exception:
+                pass
+        num = str(secrets.randbelow(10000)).zfill(4)
+        return " ".join(num)
     return secrets.choice(pool)
+
 
 
 class GameState:
@@ -53,6 +92,7 @@ class GameState:
 
         self.round_number = 0
         self.round_history = []
+        self.game_numbers = []
 
     # --- transitions ---
 
@@ -87,11 +127,17 @@ class GameState:
         self.round_number = 1
         self.round_history = []
 
+        # Pre-select 10 numbers for all 10 rounds before the game starts
+        self.game_numbers = [generate_4digit_number(self.difficulty) for _ in range(ROUNDS_PER_GAME)]
+
         self._start_round()
 
     def _start_round(self):
         self.phase = "round"
-        self.number = generate_4digit_number(self.difficulty)
+        if hasattr(self, "game_numbers") and self.game_numbers and 1 <= self.round_number <= len(self.game_numbers):
+            self.number = self.game_numbers[self.round_number - 1]
+        else:
+            self.number = generate_4digit_number(self.difficulty)
         self.clicks = {"enter": False, "shift": False, "mouse": False}
         self.press_times = {"enter": None, "shift": None, "mouse": None}
 
@@ -105,7 +151,10 @@ class GameState:
 
     def new_number(self):
         if self.phase == "round" and not any(self.clicks.values()):
-            self.number = generate_4digit_number(self.difficulty)
+            new_num = generate_4digit_number(self.difficulty)
+            self.number = new_num
+            if hasattr(self, "game_numbers") and self.game_numbers and 1 <= self.round_number <= len(self.game_numbers):
+                self.game_numbers[self.round_number - 1] = new_num
 
     def press(self, key):
         if self.phase != "round" or key not in self.clicks or self.clicks[key]:

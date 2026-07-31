@@ -68,6 +68,10 @@ export function rejoinRoom(roomCode: string, playerId: string) {
   getSocket().emit("rejoin_room", { room_code: roomCode, player_id: playerId });
 }
 
+export function startGame() {
+  getSocket().emit("start_game", {});
+}
+
 export function selectMode(mode: Mode) {
   getSocket().emit("select_mode", { mode });
 }
@@ -96,8 +100,12 @@ export function adminLogin(password: string) {
   getSocket().emit("admin_login", { password });
 }
 
-export function adminScores(p1_score: number, p2_score: number, p3_score: number) {
-  getSocket().emit("admin_scores", { p1_score, p2_score, p3_score });
+export function adminScores(scores: Record<string, number> | number, p2_score?: number, p3_score?: number) {
+  if (typeof scores === "object") {
+    getSocket().emit("admin_scores", { scores });
+  } else {
+    getSocket().emit("admin_scores", { p1_score: scores, p2_score, p3_score });
+  }
 }
 
 // --- subscriptions — each returns an unsubscribe function for useEffect cleanup ---

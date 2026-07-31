@@ -164,6 +164,12 @@ def handle_leave_room(data=None):
         _broadcast_room(room)
 
 
+@socketio.on("start_game")
+@_with_room
+def handle_start_game(room, player_id, data):
+    room.start_game(player_id)
+
+
 @socketio.on("select_mode")
 @_with_room
 def handle_select_mode(room, player_id, data):
@@ -201,11 +207,14 @@ def handle_back_to_mode_select(room, player_id, data):
 @_with_room
 def handle_admin_scores(room, player_id, data):
     try:
-        room.admin_set_scores(
-            data.get("p1_score", 0),
-            data.get("p2_score", 0),
-            data.get("p3_score", 0),
-        )
+        if "scores" in data and isinstance(data["scores"], dict):
+            room.admin_set_scores(data["scores"])
+        else:
+            room.admin_set_scores(
+                data.get("p1_score", 0),
+                data.get("p2_score", 0),
+                data.get("p3_score", 0),
+            )
     except (TypeError, ValueError):
         raise InvalidScoresError("Scores must be numbers.")
 

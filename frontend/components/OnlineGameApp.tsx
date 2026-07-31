@@ -18,6 +18,7 @@ import {
   saveStoredSession,
   scoreReady,
   selectMode,
+  startGame,
   timeout as emitTimeout,
 } from "@/lib/socket";
 import type { GameStateDTO } from "@/lib/api";
@@ -28,8 +29,7 @@ import ScoreScreen from "./ScoreScreen";
 import Podium from "./Podium";
 import AdminDialog from "./AdminDialog";
 import PressButton from "./PressButton";
-
-const SLOT_TO_KEY = { p1: "enter", p2: "shift", p3: "mouse" } as const;
+import CountdownScreen from "./CountdownScreen";
 
 interface Props {
   onBackToLanding: () => void;
@@ -87,21 +87,19 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
     };
   }, []);
 
-  // Drive the round countdown and fire `timeout` once it elapses — the
-  // server runs no clock of its own, mirroring the local/REST GameApp.
-  // remainingSeconds is only ever set from inside the interval callback
-  // (never synchronously in the effect body) — RoundScreen unmounts outside
-  // the round phase, so a stale value between rounds is never displayed.
+  // Drive the countdown timer for both countdown and round phases
   useEffect(() => {
-    if (
-      !roomState ||
-      roomState.phase !== "round" ||
-      !roomState.round.started ||
-      roomState.round.deadline_ts === null
-    ) {
-      return;
-    }
-    const deadline = roomState.round.deadline_ts;
+    if (!roomState) return;
+
+    const deadline =
+      roomState.phase === "countdown"
+        ? roomState.round?.deadline_ts
+        : roomState.phase === "round" && roomState.round?.started
+        ? roomState.round?.deadline_ts
+        : null;
+
+    if (!deadline) return;
+
     const id = setInterval(() => {
       const remaining = deadline - Date.now() / 1000;
       if (remaining <= 0) {
@@ -111,17 +109,23 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
       }
     }, 200);
     return () => clearInterval(id);
-  }, [roomState?.phase, roomState?.round.started, roomState?.round.deadline_ts]);
+  }, [roomState?.phase, roomState?.round?.started, roomState?.round?.deadline_ts]);
 
-  // Enter/Space press the online "my own solve action" shortcut — no
-  // ENTER/SHIFT/mouse slot routing needed, identity comes from the socket.
+  // Enter/Space press the online "my own solve action" shortcut
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (adminOpenRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
       const s = roomStateRef.current;
       if (!s) return;
-      if (e.key !== "Enter" && e.code !== "Space") return;
 
+      const isEnterOrSpace =
+        e.key === "Enter" || e.key === " " || e.code === "Space" || e.code === "Enter";
+      if (!isEnterOrSpace) return;
+
+      e.preventDefault();
       if (s.phase === "score") scoreReady();
       else if (s.phase === "round") press();
     };
@@ -132,6 +136,7 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
   const handleCreateRoom = useCallback((name: string) => createRoom(name), []);
   const handleJoinRoom = useCallback((roomCode: string, name: string) => joinRoom(roomCode, name), []);
   const handleSelectMode = useCallback((mode: Mode) => selectMode(mode), []);
+  const handleStartGame = useCallback(() => startGame(), []);
   const handleLeaveRoom = useCallback(() => {
     leaveRoom();
     saveStoredSession(null);
@@ -170,15 +175,16 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
         onSelectMode={handleSelectMode}
+        onStartGame={handleStartGame}
         onLeaveRoom={handleLeaveRoom}
         onBackToLanding={onBackToLanding}
       />
     );
   }
 
-  const myKey = session ? SLOT_TO_KEY[session.slot] : null;
-  const alreadyPressed = myKey !== null && roomState.round.clicks[myKey];
-  const alreadyReady = myKey !== null && roomState.ready[myKey];
+  const myPlayer = session ? roomState.players.find((p) => p.player_id === session.player_id || p.slot === session.slot) : null;
+  const alreadyPressed = myPlayer?.clicked ?? (session ? Boolean(roomState.round.clicks[session.player_id]) : false);
+  const alreadyReady = myPlayer?.ready ?? (session ? Boolean(roomState.ready[session.player_id]) : false);
 
   return (
     <div className="flex min-h-screen flex-1 flex-col">
@@ -190,9 +196,14 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onSelectMode={handleSelectMode}
+          onStartGame={handleStartGame}
           onLeaveRoom={handleLeaveRoom}
           onBackToLanding={onBackToLanding}
         />
+      )}
+
+      {roomState.phase === "countdown" && (
+        <CountdownScreen remainingSeconds={remainingSeconds} players={roomState.players} />
       )}
 
       {roomState.phase === "round" && (

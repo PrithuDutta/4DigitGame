@@ -10,13 +10,22 @@ interface Props {
 export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSlot }: Props) {
   const isFinalRound = state.round_number >= state.rounds_per_game;
 
-  const rawPlayers = [
-    { id: "p1", name: state.p1_name, keyLabel: "ENTER", ready: state.ready.enter, total: state.p1_score },
-    { id: "p2", name: state.p2_name, keyLabel: "SHIFT", ready: state.ready.shift, total: state.p2_score },
-    ...(state.mode === "3p"
-      ? [{ id: "p3", name: state.p3_name, keyLabel: "LMB", ready: state.ready.mouse, total: state.p3_score }]
-      : []),
-  ];
+  const isOnline = Array.isArray((state as any).players);
+  const rawPlayers = isOnline
+    ? (state as any).players.map((p: any) => ({
+        id: p.player_id || p.slot,
+        name: p.name,
+        keyLabel: null,
+        ready: Boolean(p.ready || state.ready[p.player_id]),
+        total: p.score ?? 0,
+      }))
+    : [
+        { id: "p1", name: state.p1_name, keyLabel: "ENTER", ready: state.ready.enter, total: state.p1_score },
+        { id: "p2", name: state.p2_name, keyLabel: "SHIFT", ready: state.ready.shift, total: state.p2_score },
+        ...(state.mode === "3p"
+          ? [{ id: "p3", name: state.p3_name, keyLabel: "LMB", ready: state.ready.mouse, total: state.p3_score }]
+          : []),
+      ];
 
   // SORT PLAYERS BY TOTAL SCORE DESCENDING (Leader on top!)
   const sortedPlayers = [...rawPlayers].sort((a, b) => b.total - a.total);
@@ -62,7 +71,9 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSl
                       {isLeader ? "👑 #1" : `#${rankIndex + 1}`}
                     </span>
                     <span className="text-sm font-bold text-white">{player.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">[{player.keyLabel}]</span>
+                    {player.keyLabel && (
+                      <span className="font-mono text-[10px] text-slate-500">[{player.keyLabel}]</span>
+                    )}
                   </div>
 
                   <div className="font-mono text-sm font-bold text-amber-400">
@@ -100,20 +111,20 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSl
       {/* Ready Badges */}
       <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-3 text-center mb-4">
         <p className="mb-2 text-xs font-semibold text-slate-400">
-          {isFinalRound ? "Press all keys for final results" : "Press all keys for next round"}
+          {isFinalRound ? "Ready up for final results" : "Ready up for next round"}
         </p>
 
         <div className="flex flex-wrap justify-center gap-2">
-          {rawPlayers.map((p) => (
+          {rawPlayers.map((p: any) => (
             <span
               key={p.id}
               className={`rounded px-2.5 py-1 text-xs font-bold font-mono border ${
                 p.ready
                   ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
-                  : "border-[#202738] bg-[#0b0d14] text-slate-400"
+                  : "border-[#202738] bg-[#0b0d14]"
               }`}
             >
-              {p.name} [{p.keyLabel}]: {p.ready ? "READY ✓" : "WAITING..."}
+              {p.name}{p.keyLabel ? ` [${p.keyLabel}]` : ""}: {p.ready ? "READY ✓" : "WAITING..."}
             </span>
           ))}
         </div>

@@ -1,7 +1,7 @@
-import secrets
 import eventlet
 eventlet.monkey_patch()
 
+import secrets
 import threading
 
 from flask import Flask, jsonify, request

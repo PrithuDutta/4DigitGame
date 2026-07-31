@@ -10,6 +10,7 @@ interface Props {
   onCreateRoom: (name: string) => void;
   onJoinRoom: (roomCode: string, name: string) => void;
   onSelectMode: (mode: Mode) => void;
+  onStartGame?: () => void;
   onLeaveRoom: () => void;
   onBackToLanding: () => void;
 }
@@ -21,6 +22,7 @@ export default function LobbyScreen({
   onCreateRoom,
   onJoinRoom,
   onSelectMode,
+  onStartGame,
   onLeaveRoom,
   onBackToLanding,
 }: Props) {
@@ -113,7 +115,6 @@ export default function LobbyScreen({
     );
   }
 
-  const requiredCount = roomState.mode === "3p" ? 3 : roomState.mode === "2p" ? 2 : null;
   const joinedCount = roomState.players.length;
 
   const copyCode = () => {
@@ -146,7 +147,7 @@ export default function LobbyScreen({
         {/* Players List */}
         <div className="w-full rounded-2xl border border-slate-800 bg-[var(--bg-card)] p-4 backdrop-blur-xl mb-4 text-left">
           <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
-            CONNECTED PLAYERS ({joinedCount} / {requiredCount ?? "?"})
+            CONNECTED PLAYERS ({joinedCount})
           </p>
           <div className="flex flex-col gap-2">
             {roomState.players.map((p) => (
@@ -175,36 +176,32 @@ export default function LobbyScreen({
           </div>
         </div>
 
-        {/* Mode Selector for Host */}
-        {session.is_host && !roomState.mode && (
+        {/* Start Game Control for Host */}
+        {session.is_host && (
           <div className="w-full rounded-2xl border border-indigo-500/30 bg-[var(--bg-card)] p-4 backdrop-blur-xl mb-4">
-            <p className="mb-3 font-mono text-xs font-bold text-indigo-300">HOST: SELECT MATCH MODE</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => onSelectMode("2p")}
-                className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg"
-              >
-                2 Players
-              </button>
-              <button
-                onClick={() => onSelectMode("3p")}
-                className="flex-1 rounded-xl border border-indigo-500/40 bg-indigo-500/20 py-2.5 text-xs font-bold text-indigo-300"
-              >
-                3 Players
-              </button>
-            </div>
+            <p className="mb-2 font-mono text-xs font-bold text-indigo-300">HOST CONTROLS</p>
+            <button
+              disabled={joinedCount < 2}
+              onClick={() => (onStartGame ? onStartGame() : onSelectMode("3p"))}
+              className={`w-full rounded-xl py-3 text-sm font-bold text-white shadow-lg transition-all ${
+                joinedCount < 2
+                  ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                  : "bg-emerald-600 shadow-emerald-600/30 hover:bg-emerald-500"
+              }`}
+            >
+              🚀 Start Game ({joinedCount} Player{joinedCount === 1 ? "" : "s"})
+            </button>
+            {joinedCount < 2 && (
+              <p className="mt-2 text-[11px] text-amber-400/90 font-medium">
+                ⏳ Waiting for at least 1 more player to join... (Minimum 2 players)
+              </p>
+            )}
           </div>
         )}
 
-        {!session.is_host && !roomState.mode && (
+        {!session.is_host && (
           <div className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-400 mb-4">
-            ⏳ Waiting for host to select match mode...
-          </div>
-        )}
-
-        {roomState.mode && requiredCount !== null && joinedCount < requiredCount && (
-          <div className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-400 mb-4">
-            ⏳ Waiting for {requiredCount - joinedCount} more player{requiredCount - joinedCount === 1 ? "" : "s"}...
+            ⏳ Waiting for host to start the game...
           </div>
         )}
 

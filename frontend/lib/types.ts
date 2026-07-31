@@ -1,12 +1,16 @@
 import type { GameStateDTO, Mode } from "@/lib/api";
 
-export type Slot = "p1" | "p2" | "p3";
+export type Slot = string;
 
 export interface PlayerDTO {
   slot: Slot;
+  player_id?: string;
   name: string;
+  score?: number;
   connected: boolean;
   is_host: boolean;
+  ready?: boolean;
+  clicked?: boolean;
 }
 
 // Structural superset of GameStateDTO — RoundScreen/ScoreScreen accept this

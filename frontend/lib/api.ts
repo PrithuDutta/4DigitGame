@@ -1,6 +1,6 @@
 export type Mode = "2p" | "3p";
 export type Difficulty = "easy" | "hard";
-export type Phase = "difficulty_select" | "mode_select" | "name_entry" | "round" | "score" | "podium";
+export type Phase = "difficulty_select" | "mode_select" | "name_entry" | "countdown" | "round" | "score" | "podium";
 export type PressKey = "enter" | "shift" | "mouse";
 
 export interface RoundScoreDTO {
@@ -40,14 +40,14 @@ export interface GameStateDTO {
   round: {
     number: string;
     started: boolean;
-    clicks: { enter: boolean; shift: boolean; mouse: boolean };
+    clicks: Record<string, boolean>;
     deadline_ts: number | null;
   };
   score_message: string;
   last_number: string;
   last_round_scores: Record<string, RoundScoreDTO>;
   round_history: RoundHistoryEntryDTO[];
-  ready: { enter: boolean; shift: boolean; mouse: boolean };
+  ready: Record<string, boolean>;
 }
 
 export interface ConfigDTO {

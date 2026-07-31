@@ -23,9 +23,19 @@ export default function AdminDialog({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const [p1, setP1] = useState(state.p1_score.toFixed(1));
-  const [p2, setP2] = useState(state.p2_score.toFixed(1));
-  const [p3, setP3] = useState(state.p3_score.toFixed(1));
+  const isOnline = Array.isArray((state as any).players);
+  const initialScores: Record<string, string> = isOnline
+    ? (state as any).players.reduce((acc: Record<string, string>, p: any) => {
+        acc[p.player_id || p.slot] = (p.score ?? 0).toFixed(1);
+        return acc;
+      }, {})
+    : {
+        p1: state.p1_score.toFixed(1),
+        p2: state.p2_score.toFixed(1),
+        p3: state.p3_score.toFixed(1),
+      };
+
+  const [scoresMap, setScoresMap] = useState<Record<string, string>>(initialScores);
 
   const attemptLogin = async () => {
     const { ok } = await onLogin(password);
@@ -40,14 +50,40 @@ export default function AdminDialog({
 
   const saveScores = async () => {
     const isNumber = (v: string) => v.trim() !== "" && !Number.isNaN(Number(v));
-    if (!isNumber(p1) || !isNumber(p2) || (state.mode === "3p" && !isNumber(p3))) {
+    const invalid = Object.values(scoresMap).some((v) => !isNumber(v));
+    if (invalid) {
       setError("Scores must be numbers.");
       return;
     }
-    const next = await onSubmitScores(Number(p1), Number(p2), Number(p3));
-    onScoresUpdated(next);
+
+    if (isOnline) {
+      const numScores = Object.entries(scoresMap).reduce((acc: Record<string, number>, [k, v]) => {
+        acc[k] = Number(v);
+        return acc;
+      }, {});
+      const next = await onSubmitScores(numScores as any, 0, 0);
+      onScoresUpdated(next);
+    } else {
+      const next = await onSubmitScores(
+        Number(scoresMap.p1 ?? 0),
+        Number(scoresMap.p2 ?? 0),
+        Number(scoresMap.p3 ?? 0)
+      );
+      onScoresUpdated(next);
+    }
     onClose();
   };
+
+  const editList = isOnline
+    ? (state as any).players.map((p: any) => ({
+        id: p.player_id || p.slot,
+        label: p.name,
+      }))
+    : [
+        { id: "p1", label: state.p1_name },
+        { id: "p2", label: state.p2_name },
+        ...(state.mode === "3p" ? [{ id: "p3", label: state.p3_name }] : []),
+      ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -105,18 +141,16 @@ export default function AdminDialog({
             </h3>
 
             <div className="flex flex-col gap-3">
-              {[
-                [state.p1_name, p1, setP1],
-                [state.p2_name, p2, setP2],
-                ...(state.mode === "3p" ? [[state.p3_name, p3, setP3] as const] : []),
-              ].map(([label, value, setValue], i) => (
-                <div key={i} className="flex items-center justify-between gap-2">
+              {editList.map((item: any) => (
+                <div key={item.id} className="flex items-center justify-between gap-2">
                   <label className="text-xs font-bold text-slate-300">
-                    {label as string}:
+                    {item.label}:
                   </label>
                   <input
-                    value={value as string}
-                    onChange={(e) => (setValue as (v: string) => void)(e.target.value)}
+                    value={scoresMap[item.id] ?? "0.0"}
+                    onChange={(e) =>
+                      setScoresMap((prev) => ({ ...prev, [item.id]: e.target.value }))
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") saveScores();
                     }}

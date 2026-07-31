@@ -1,9 +1,9 @@
 import itertools
 import math
-import json
+import sqlite3
 
 TARGET = 10
-DIGIT_RANGE = range(10) # Digits 0 through 9
+DIGIT_RANGE = range(10)
 
 def safe_operations(a, b, hard_mode=False):
     """Yields all possible valid results of combining a and b."""
@@ -14,23 +14,39 @@ def safe_operations(a, b, hard_mode=False):
         yield a / b
     
     if hard_mode:
-        # Safe Exponents (a^b): Limit base and power to prevent overflow crashes
+        # 1. Safe Exponents (a^b)
         if abs(a) < 100 and -6 <= b <= 6 and int(b) == b:
             try:
                 yield a ** int(b)
             except (OverflowError, ZeroDivisionError, ValueError):
                 pass
 
+# 2. Safe Nth Root (b-th root of a)
+        if b != 0 and a >= 0:
+            # Safely skip zero to a negative power before evaluating
+            if a == 0 and b < 0:
+                pass
+            else:
+                try:
+                    root_val = a ** (1.0 / b)
+                    
+                    # Snap to integer if it's exceptionally close to prevent floating-point drift
+                    if math.isclose(root_val, round(root_val), rel_tol=1e-9):
+                        yield float(round(root_val))
+                    else:
+                        yield root_val
+                except (OverflowError, ZeroDivisionError, ValueError, TypeError):
+                    pass
+
 def apply_unary(val):
     """Returns a list of values after applying optional unary operations."""
-    # Using a set automatically filters out redundancies (e.g., sqrt(1) is just 1)
     results = set([val])
     
-    # Factorial (!) - Limit to integers between 0 and 6
+    # Factorial (!)
     if 0 <= val <= 6 and int(val) == val:
         results.add(float(math.factorial(int(val))))
     
-    # Square Root (sqrt) - Limit to non-negative numbers
+    # Square Root (sqrt)
     if val >= 0:
         results.add(math.sqrt(val))
         
@@ -38,17 +54,16 @@ def apply_unary(val):
 
 def can_reach_target(nums, hard_mode=False):
     """Recursively checks if a list of numbers can evaluate to the TARGET."""
-    # Base Case: Only one number left
     if len(nums) == 1:
-        # Apply unary operations to the final number in hard mode
         final_vals = apply_unary(nums[0]) if hard_mode else [nums[0]]
         for val in final_vals:
-            # Use math.isclose to avoid floating point precision errors
+            # Skip complex numbers if they somehow leaked through
+            if isinstance(val, complex):
+                continue
             if math.isclose(val, TARGET, rel_tol=1e-9):
                 return True
         return False
 
-    # Recursive Case: Pick any two numbers and combine them
     for i in range(len(nums)):
         for j in range(len(nums)):
             if i == j:
@@ -57,24 +72,17 @@ def can_reach_target(nums, hard_mode=False):
             a, b = nums[i], nums[j]
             remaining = [nums[k] for k in range(len(nums)) if k != i and k != j]
             
-            # Unary operations apply to a number *before* combining it with another
             a_vals = apply_unary(a) if hard_mode else [a]
             b_vals = apply_unary(b) if hard_mode else [b]
 
             for av in a_vals:
                 for bv in b_vals:
                     for result in safe_operations(av, bv, hard_mode):
-                        # The 'result' is passed into the next recursive call, meaning 
-                        # apply_unary will automatically apply to the result of this operation
-                        # on the next loop (e.g., (1 + 2)! is supported).
                         if can_reach_target(remaining + [result], hard_mode):
                             return True
     return False
 
-def generate_pool():
-    pool = {"easy": [], "hard": []}
-    
-    # Step 1: Pre-calculate the 715 unique sets of 4 digits
+def generate_and_seed_db():
     print("Calculating unique mathematical combinations...")
     unique_sets = list(itertools.combinations_with_replacement(DIGIT_RANGE, 4))
     memo = {}
@@ -88,28 +96,47 @@ def generate_pool():
         else:
             memo[combo] = "invalid"
 
-    # Step 2: Generate all 10,000 string permutations and map them to the results
     print("Mapping results to all 10,000 possible 4-digit numbers...")
-    all_strings = [f"{i:04d}" for i in range(10000)] # Generates "0000" to "9999"
+    all_strings = [f"{i:04d}" for i in range(10000)]
+    
+    easy_count = 0
+    hard_count = 0
+
+    # Connect directly to the SQLite database
+    conn = sqlite3.connect('game.db')
+    cursor = conn.cursor()
+
+    # Clear existing valid pools for config_id = 1 so we don't insert duplicates
+    cursor.execute("DELETE FROM valid_pools WHERE config_id = 1")
+
+    insert_data = []
     
     for s in all_strings:
-        # Convert string like "0402" to a sorted tuple (0, 0, 2, 4) to check our memo dictionary
         digits_tuple = tuple(sorted(int(d) for d in s))
-        
         category = memo.get(digits_tuple, "invalid")
         
         if category == "easy":
-            pool["easy"].append(s)
-            pool["hard"].append(s) # <-- Add it to the hard pool as well!
+            # Append to both easy and hard pools
+            insert_data.append((1, s, "easy"))
+            insert_data.append((1, s, "hard"))
+            easy_count += 1
+            hard_count += 1
         elif category == "hard":
-            pool["hard"].append(s)
+            # Append only to the hard pool
+            insert_data.append((1, s, "hard"))
+            hard_count += 1
 
-    # Export to JSON
-    with open("valid_numbers.json", "w") as f:
-        json.dump(pool, f, indent=4)
+    print("Writing to SQLite database...")
+    cursor.executemany(
+        "INSERT INTO valid_pools (config_id, number_string, difficulty) VALUES (?, ?, ?)",
+        insert_data
+    )
     
-    print(f"\nComplete! Exported to valid_numbers.json")
-    print(f"Found {len(pool['easy'])} Easy numbers and {len(pool['hard'])} Hard numbers.")
+    conn.commit()
+    conn.close()
+    
+    print(f"\nComplete! Data has been refreshed in the game.db file.")
+    print(f"Found {easy_count} Easy numbers and {hard_count} Hard numbers.")
 
 if __name__ == "__main__":
-    generate_pool()
+    generate_and_seed_db()

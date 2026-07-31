@@ -2,9 +2,10 @@
 
 interface Props {
   onSelect: (choice: "local" | "online") => void;
+  onReplayTutorial: () => void;
 }
 
-export default function LandingScreen({ onSelect }: Props) {
+export default function LandingScreen({ onSelect, onReplayTutorial }: Props) {
   return (
     <div className="flex flex-1 items-center justify-center p-4">
       <div className="flex w-full max-w-sm flex-col items-center">
@@ -59,6 +60,13 @@ export default function LandingScreen({ onSelect }: Props) {
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-400">Room code across separate devices</p>
+          </button>
+
+          <button
+            onClick={onReplayTutorial}
+            className="w-full py-2 text-center text-xs font-semibold text-slate-500 hover:text-slate-300"
+          >
+            New here? Replay the tutorial
           </button>
         </div>
       </div>

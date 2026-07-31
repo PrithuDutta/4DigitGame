@@ -3,9 +3,10 @@
 interface Props {
   onSelect: (mode: "2p" | "3p") => void;
   onSandbox: () => void;
+  onExit: () => void;
 }
 
-export default function ModeScreen({ onSelect, onSandbox }: Props) {
+export default function ModeScreen({ onSelect, onSandbox, onExit }: Props) {
   return (
     <div className="flex flex-1 items-center justify-center p-4">
       <div className="flex w-full max-w-xs flex-col items-center">
@@ -43,6 +44,13 @@ export default function ModeScreen({ onSelect, onSandbox }: Props) {
           >
             <span>1 Player (Sandbox)</span>
             <span className="font-mono text-[10px] text-purple-400">SOLO</span>
+          </button>
+
+          <button
+            onClick={onExit}
+            className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2.5 text-xs font-semibold text-slate-400 hover:text-white"
+          >
+            ← Exit
           </button>
         </div>
       </div>

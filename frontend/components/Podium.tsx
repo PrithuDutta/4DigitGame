@@ -3,13 +3,14 @@ import type { GameStateDTO } from "@/lib/api";
 interface Props {
   state: GameStateDTO;
   onPlayAgain: () => void;
+  onExit?: () => void;
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 const PODIUM_HEIGHTS = ["h-28", "h-20", "h-14"];
 const DISPLAY_ORDER = [1, 0, 2];
 
-export default function Podium({ state, onPlayAgain }: Props) {
+export default function Podium({ state, onPlayAgain, onExit }: Props) {
   const standings = state.standings;
   const positions = DISPLAY_ORDER.filter((i) => i < standings.length);
   const winner = standings[0];
@@ -104,6 +105,14 @@ export default function Podium({ state, onPlayAgain }: Props) {
       >
         Play Again
       </button>
+      {onExit && (
+        <button
+          onClick={onExit}
+          className="mt-2 w-full max-w-md rounded-xl border border-[#202738] bg-[#131722] py-2.5 text-xs font-bold text-slate-400 hover:text-white transition-colors"
+        >
+          ← Exit
+        </button>
+      )}
     </div>
   );
 }

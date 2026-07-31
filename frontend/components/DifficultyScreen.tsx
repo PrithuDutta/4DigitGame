@@ -2,9 +2,10 @@
 
 interface Props {
   onSelect: (difficulty: "easy" | "hard") => void;
+  onExit: () => void;
 }
 
-export default function DifficultyScreen({ onSelect }: Props) {
+export default function DifficultyScreen({ onSelect, onExit }: Props) {
   return (
     <div className="flex flex-1 items-center justify-center p-4">
       <div className="flex w-full max-w-xs flex-col items-center">
@@ -27,6 +28,13 @@ export default function DifficultyScreen({ onSelect }: Props) {
           >
             <span className="text-sm font-bold text-white">Hard Mode</span>
             <span className="text-xs text-slate-400 mt-0.5">All operations (factorials, roots, exponents)</span>
+          </button>
+
+          <button
+            onClick={onExit}
+            className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2.5 text-xs font-semibold text-slate-400 hover:text-white"
+          >
+            ← Exit
           </button>
         </div>
       </div>

@@ -52,6 +52,58 @@ def _seat_and_announce(room, player_id, slot):
     _broadcast_room(room)
 
 
+def _schedule_bot_actions_for_room(room):
+    """Inspect room state and spawn non-blocking async background tasks for bot players."""
+    with room.lock:
+        phase = room.phase
+        bots_to_press = []
+        bots_to_ready = []
+
+        if phase == "round":
+            for p in room.players.values():
+                if p.is_bot and not p.clicked:
+                    delay_ms = room.calculate_bot_delay_ms()
+                    bots_to_press.append((p.player_id, delay_ms / 1000.0))
+        elif phase == "score":
+            for p in room.players.values():
+                if p.is_bot and not p.ready:
+                    bots_to_ready.append((p.player_id, 1.5))
+
+    for player_id, delay_sec in bots_to_press:
+        _schedule_bot_press(room, player_id, delay_sec)
+
+    for player_id, delay_sec in bots_to_ready:
+        _schedule_bot_ready(room, player_id, delay_sec)
+
+
+def _schedule_bot_press(room, player_id, delay_sec):
+    def bot_press_task():
+        socketio.sleep(delay_sec)
+        with room.lock:
+            if room.phase == "round" and player_id in room.players:
+                p = room.players[player_id]
+                if p.is_bot and not p.clicked:
+                    room.press_as_player(player_id)
+        _broadcast_room(room)
+        _schedule_bot_actions_for_room(room)
+
+    socketio.start_background_task(bot_press_task)
+
+
+def _schedule_bot_ready(room, player_id, delay_sec):
+    def bot_ready_task():
+        socketio.sleep(delay_sec)
+        with room.lock:
+            if room.phase == "score" and player_id in room.players:
+                p = room.players[player_id]
+                if p.is_bot and not p.ready:
+                    room.score_ready_as_player(player_id)
+        _broadcast_room(room)
+        _schedule_bot_actions_for_room(room)
+
+    socketio.start_background_task(bot_ready_task)
+
+
 def _with_room(handler):
     """Resolve (room, player_id) for the calling sid, require an active
     room, run `handler` under that room's lock, turn RoomError into a
@@ -70,6 +122,7 @@ def _with_room(handler):
             _emit_error(e.code, str(e))
             return
         _broadcast_room(room)
+        _schedule_bot_actions_for_room(room)
 
     return wrapper
 
@@ -81,8 +134,13 @@ def handle_disconnect():
     if room is None:
         return
     with room.lock:
-        room.mark_disconnected(player_id)
+        player = room.players.get(player_id)
+        if player is not None:
+            player.is_bot = True
+            player.connected = True
+            player.sid = None
     _broadcast_room(room)
+    _schedule_bot_actions_for_room(room)
 
 
 @socketio.on("create_room")

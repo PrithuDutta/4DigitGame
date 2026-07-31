@@ -30,7 +30,13 @@ def create_room(host_player_id):
 
 
 def get_room(room_code):
-    return rooms.get(room_code)
+    with _lock:
+        return rooms.get(room_code)
+
+
+def get_all_rooms():
+    with _lock:
+        return list(rooms.values())
 
 
 def delete_room(room_code):

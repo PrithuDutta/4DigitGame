@@ -90,6 +90,9 @@ class GameState:
         self.last_round_scores = {}
         self.ready = {"enter": False, "shift": False, "mouse": False}
 
+        self.fastest_time_ms = None
+        self.slowest_time_ms = None
+
         self.round_number = 0
         self.round_history = []
         self.game_numbers = []
@@ -293,4 +296,6 @@ class GameState:
             "last_round_scores": dict(self.last_round_scores),
             "round_history": list(self.round_history),
             "ready": dict(self.ready),
+            "fastest_time_ms": self.fastest_time_ms,
+            "slowest_time_ms": self.slowest_time_ms,
         }

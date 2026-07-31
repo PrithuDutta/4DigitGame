@@ -15,6 +15,14 @@ interface Props {
   onBackToLanding: () => void;
 }
 
+// Applied to the already-trimmed name (leading/trailing whitespace is fine
+// and gets silently cleaned up) — what's left must be non-empty and
+// alphanumeric only, no internal spaces or special characters. Mirrored
+// server-side in room.py's add_player() since a malicious client could
+// bypass this UI entirely.
+const VALID_NAME_RE = /^[A-Za-z0-9]+$/;
+const INVALID_NAME_MESSAGE = "Names can only contain letters and numbers (no spaces or symbols).";
+
 export default function LobbyScreen({
   session,
   roomState,
@@ -39,6 +47,10 @@ export default function LobbyScreen({
       setCreateError("Please enter a display name.");
       return;
     }
+    if (!VALID_NAME_RE.test(name)) {
+      setCreateError(INVALID_NAME_MESSAGE);
+      return;
+    }
     setCreateError(null);
     onCreateRoom(name);
   };
@@ -56,6 +68,10 @@ export default function LobbyScreen({
     }
     if (!name) {
       setJoinError("Please enter your name.");
+      return;
+    }
+    if (!VALID_NAME_RE.test(name)) {
+      setJoinError(INVALID_NAME_MESSAGE);
       return;
     }
     setJoinError(null);

@@ -1,9 +1,18 @@
 import random
+import re
 import threading
 import time
 
 from game_state import GameState, ROUNDS_PER_GAME, generate_4digit_number
 from scoring import PlayerRoundResult, score_round
+
+# Applied to the already-stripped name (leading/trailing whitespace is fine
+# and gets silently cleaned up) — what's left must be non-empty and
+# alphanumeric only, no internal spaces or special characters. Mirrored in
+# LobbyScreen.tsx for immediate UI feedback, but enforced here too since a
+# client could call the create_room/join_room socket events directly,
+# bypassing that UI entirely.
+VALID_NAME_RE = re.compile(r"^[A-Za-z0-9]+$")
 
 
 class RoomError(Exception):
@@ -88,6 +97,8 @@ class Room(GameState):
         name = (name or "").strip()
         if not name:
             raise InvalidNameError("Please enter a name.")
+        if not VALID_NAME_RE.match(name):
+            raise InvalidNameError("Names can only contain letters and numbers (no spaces or symbols).")
 
         if self.phase not in ("mode_select", "name_entry", "lobby"):
             raise AlreadyStartedError("This game has already started.")

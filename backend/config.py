@@ -13,4 +13,6 @@ COLOR_SUCCESS = "#10b981"
 
 ADMIN_PASSWORD = "pqclarp"
 
-FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000").split(",")
+FRONTEND_ORIGINS = os.environ.get(
+    "FRONTEND_ORIGIN", "http://localhost:3000,http://localhost:3001"
+).split(",")

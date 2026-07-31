@@ -4,10 +4,11 @@ interface Props {
   state: GameStateDTO;
   onOpenAdmin: () => void;
   onChangeMode: () => void;
+  onExit?: () => void;
   actionSlot?: React.ReactNode;
 }
 
-export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSlot }: Props) {
+export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, actionSlot }: Props) {
   const isFinalRound = state.round_number >= state.rounds_per_game;
 
   const rawPlayers = [
@@ -135,6 +136,14 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, actionSl
         >
           Change Mode
         </button>
+        {onExit && (
+          <button
+            onClick={onExit}
+            className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
+          >
+            ← Exit
+          </button>
+        )}
       </div>
     </div>
   );

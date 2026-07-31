@@ -33,7 +33,7 @@ export default function AppRoot() {
 
   let content: React.ReactNode;
   if (choice === "local") {
-    content = <GameApp />;
+    content = <GameApp onBackToLanding={() => setExplicitChoice("landing")} />;
   } else if (choice === "online") {
     content = <OnlineGameApp onBackToLanding={() => setExplicitChoice("landing")} />;
   } else {

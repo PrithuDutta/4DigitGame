@@ -22,7 +22,11 @@ import Podium from "./Podium";
 import Sandbox from "./Sandbox";
 import AdminDialog from "./AdminDialog";
 
-export default function GameApp() {
+interface Props {
+  onBackToLanding: () => void;
+}
+
+export default function GameApp({ onBackToLanding }: Props) {
   const [state, setState] = useState<GameStateDTO | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -170,11 +174,18 @@ export default function GameApp() {
   return (
     <div className="flex min-h-screen flex-1 flex-col">
       {state.phase === "difficulty_select" && (
-        <DifficultyScreen onSelect={(diff) => applyAction(() => postDifficulty(diff))} />
+        <DifficultyScreen
+          onSelect={(diff) => applyAction(() => postDifficulty(diff))}
+          onExit={onBackToLanding}
+        />
       )}
 
       {state.phase === "mode_select" && (
-        <ModeScreen onSelect={(mode) => applyAction(() => postMode(mode))} onSandbox={() => setShowSandbox(true)} />
+        <ModeScreen
+          onSelect={(mode) => applyAction(() => postMode(mode))}
+          onSandbox={() => setShowSandbox(true)}
+          onExit={onBackToLanding}
+        />
       )}
 
       {state.phase === "name_entry" && (

@@ -209,12 +209,13 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
           state={roomState}
           onOpenAdmin={() => setAdminOpen(true)}
           onChangeMode={() => backToModeSelect()}
+          onExit={handleLeaveRoom}
           actionSlot={<PressButton label="READY" onPress={scoreReady} disabled={alreadyReady} />}
         />
       )}
 
       {roomState.phase === "podium" && (
-        <Podium state={roomState} onPlayAgain={() => backToModeSelect()} />
+        <Podium state={roomState} onPlayAgain={() => backToModeSelect()} onExit={handleLeaveRoom} />
       )}
 
       {adminOpen && (

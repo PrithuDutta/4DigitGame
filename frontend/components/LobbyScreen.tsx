@@ -28,6 +28,37 @@ export default function LobbyScreen({
   const [joinName, setJoinName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const attemptCreateRoom = () => {
+    const name = createName.trim();
+    if (!name) {
+      setCreateError("Please enter a display name.");
+      return;
+    }
+    setCreateError(null);
+    onCreateRoom(name);
+  };
+
+  const attemptJoinRoom = () => {
+    const code = joinCode.trim();
+    const name = joinName.trim();
+    if (!code && !name) {
+      setJoinError("Please enter a room code and your name.");
+      return;
+    }
+    if (!code) {
+      setJoinError("Please enter a room code.");
+      return;
+    }
+    if (!name) {
+      setJoinError("Please enter your name.");
+      return;
+    }
+    setJoinError(null);
+    onJoinRoom(code, name);
+  };
 
   if (!session || !roomState) {
     return (
@@ -50,19 +81,25 @@ export default function LobbyScreen({
               </p>
               <input
                 value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
+                onChange={(e) => {
+                  setCreateName(e.target.value);
+                  setCreateError(null);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && createName.trim()) onCreateRoom(createName.trim());
+                  if (e.key === "Enter") attemptCreateRoom();
                 }}
                 placeholder="Enter host display name"
                 className="mb-3 w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-indigo-500 focus:bg-slate-950"
               />
               <button
-                onClick={() => createName.trim() && onCreateRoom(createName.trim())}
+                onClick={attemptCreateRoom}
                 className="w-full rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-all"
               >
                 Create Room
               </button>
+              {createError && (
+                <p className="mt-2 text-center text-xs font-semibold text-rose-300">⚠️ {createError}</p>
+              )}
             </div>
 
             {/* Join Room Card */}
@@ -72,27 +109,37 @@ export default function LobbyScreen({
               </p>
               <input
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setJoinCode(e.target.value.toUpperCase());
+                  setJoinError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") attemptJoinRoom();
+                }}
                 placeholder="ENTER 4-LETTER CODE"
                 className="mb-2 w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-center font-mono text-base font-bold uppercase tracking-widest text-cyan-300 outline-none focus:border-cyan-500 focus:bg-slate-950"
               />
               <input
                 value={joinName}
-                onChange={(e) => setJoinName(e.target.value)}
+                onChange={(e) => {
+                  setJoinName(e.target.value);
+                  setJoinError(null);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && joinCode.trim() && joinName.trim()) {
-                    onJoinRoom(joinCode.trim(), joinName.trim());
-                  }
+                  if (e.key === "Enter") attemptJoinRoom();
                 }}
                 placeholder="Your display name"
                 className="mb-3 w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-500 focus:bg-slate-950"
               />
               <button
-                onClick={() => joinCode.trim() && joinName.trim() && onJoinRoom(joinCode.trim(), joinName.trim())}
+                onClick={attemptJoinRoom}
                 className="w-full rounded-xl bg-cyan-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-600/30 hover:bg-cyan-500 transition-all"
               >
                 Join Room
               </button>
+              {joinError && (
+                <p className="mt-2 text-center text-xs font-semibold text-rose-300">⚠️ {joinError}</p>
+              )}
             </div>
 
             {error && (

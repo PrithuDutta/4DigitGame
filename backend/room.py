@@ -1,3 +1,4 @@
+import random
 import threading
 import time
 
@@ -32,7 +33,7 @@ class InvalidScoresError(RoomError):
 
 
 class Player:
-    __slots__ = ("player_id", "name", "slot", "sid", "connected", "score", "ready", "clicked", "press_time")
+    __slots__ = ("player_id", "name", "slot", "sid", "connected", "score", "ready", "clicked", "press_time", "is_bot")
 
     def __init__(self, player_id, name, slot, sid):
         self.player_id = player_id
@@ -44,6 +45,7 @@ class Player:
         self.ready = False
         self.clicked = False
         self.press_time = None
+        self.is_bot = False
 
 
 class Room(GameState):
@@ -60,6 +62,26 @@ class Room(GameState):
         self.mode = "online"
         self.phase = "mode_select"
 
+    def calculate_bot_delay_ms(self) -> float:
+        """Calculate random delay between fastest_time_ms and slowest_time_ms.
+        Fallback to a random delay between 5,000ms and 15,000ms if values are None.
+        """
+        if self.fastest_time_ms is not None and self.slowest_time_ms is not None:
+            low = min(self.fastest_time_ms, self.slowest_time_ms)
+            high = max(self.fastest_time_ms, self.slowest_time_ms)
+            if low == high:
+                high = low + 1000.0
+            return random.uniform(low, high)
+        return random.uniform(5000.0, 15000.0)
+
+    def update_solve_time_stats(self, solve_time_ms: float):
+        if solve_time_ms is None or solve_time_ms <= 0:
+            return
+        if self.fastest_time_ms is None or solve_time_ms < self.fastest_time_ms:
+            self.fastest_time_ms = solve_time_ms
+        if self.slowest_time_ms is None or solve_time_ms > self.slowest_time_ms:
+            self.slowest_time_ms = solve_time_ms
+
     # --- seating ---
 
     def add_player(self, player_id, name, sid):
@@ -75,6 +97,7 @@ class Room(GameState):
             p.name = name
             p.sid = sid
             p.connected = True
+            p.is_bot = False
             return p.slot
 
         slot = f"p{len(self.players) + 1}"
@@ -88,13 +111,15 @@ class Room(GameState):
             raise PlayerNotFoundError("You're not in this room anymore.")
         player.sid = sid
         player.connected = True
+        player.is_bot = False
         self.last_activity_ts = time.time()
         return player.slot
 
     def mark_disconnected(self, player_id):
         player = self.players.get(player_id)
         if player is not None:
-            player.connected = False
+            player.is_bot = True
+            player.connected = True
             player.sid = None
 
     def remove_player(self, player_id):
@@ -193,13 +218,14 @@ class Room(GameState):
         # Build results for all players
         results = []
         solve_times = {}
-        # Order players by slot / join order for tie-breaking
         sorted_players = sorted(self.players.values(), key=lambda p: p.slot)
 
         for p in sorted_players:
             solved = p.clicked
             solve_time = (p.press_time - self.round_start_ts) if solved and p.press_time else None
             solve_times[p.player_id] = solve_time
+            if solve_time is not None:
+                self.update_solve_time_stats(solve_time * 1000.0)
             results.append(PlayerRoundResult(player_id=p.player_id, solved=solved, solve_time=solve_time))
 
         scores = score_round(results)
@@ -292,6 +318,8 @@ class Room(GameState):
             "round_time": 90.0,
             "round_number": self.round_number,
             "rounds_per_game": ROUNDS_PER_GAME,
+            "fastest_time_ms": self.fastest_time_ms,
+            "slowest_time_ms": self.slowest_time_ms,
             "p1_name": p1.name if p1 else "",
             "p2_name": p2.name if p2 else "",
             "p3_name": p3.name if p3 else "",
@@ -320,6 +348,7 @@ class Room(GameState):
                     "is_host": p.player_id == self.host_player_id,
                     "ready": p.ready,
                     "clicked": p.clicked,
+                    "is_bot": p.is_bot,
                 }
                 for p in sorted_players
             ],

@@ -342,6 +342,20 @@ class Room(GameState):
             self._finish_round()
 
     def timeout(self):
+        # Every connected client runs its own countdown independently and
+        # emits `timeout` the moment its local clock thinks a deadline
+        # passed — there's no server-side clock. With multiple players,
+        # several `timeout` events land back-to-back for the same
+        # transition. The first one flips phase and sets a fresh
+        # deadline_ts; without checking that the *current* deadline has
+        # actually elapsed, a client's stale second event would read the
+        # just-started round's round_started=True as "the round's timer
+        # expired" and immediately finish it — skipping round 1 (or any
+        # round) before anyone could play it.
+        now = time.time()
+        if self.deadline_ts is None or now < self.deadline_ts:
+            return
+
         if self.phase == "countdown":
             self._start_round()
         elif self.phase == "round" and self.round_started:

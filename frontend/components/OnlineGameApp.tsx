@@ -175,15 +175,18 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
     });
   }, []);
 
-  const onlineSubmitScores = useCallback((p1: number, p2: number, p3: number) => {
-    return new Promise<GameStateDTO>((resolve) => {
-      const off = onRoomState((state) => {
-        off();
-        resolve(state);
+  const onlineSubmitScores = useCallback(
+    (scores: Record<string, number> | number, p2?: number, p3?: number) => {
+      return new Promise<GameStateDTO>((resolve) => {
+        const off = onRoomState((state) => {
+          off();
+          resolve(state);
+        });
+        adminScores(scores, p2, p3);
       });
-      adminScores(p1, p2, p3);
-    });
-  }, []);
+    },
+    []
+  );
 
   if (!roomState) {
     return (

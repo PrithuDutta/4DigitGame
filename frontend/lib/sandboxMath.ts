@@ -88,11 +88,11 @@ export function formatValue(value: number): string {
 }
 
 const BINARY_SYMBOLS: Record<BinaryOpKind, string> = {
-  "+": "+",
+  "+": "+", "p"
   "-": "−",
   "*": "×",
-  "/": "÷",
-  "^": "^",
+  "/": "÷", "d"
+  "^": "^", "e"
   root: "√",
 };
 

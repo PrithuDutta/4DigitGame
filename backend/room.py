@@ -3,7 +3,8 @@ import re
 import threading
 import time
 
-from game_state import GameState, ROUNDS_PER_GAME, generate_4digit_number
+import sandbox_math
+from game_state import DEFAULT_TARGET, GameState, ROUNDS_PER_GAME, generate_4digit_number
 from scoring import PlayerRoundResult, score_round
 
 # Applied to the already-stripped name (leading/trailing whitespace is fine
@@ -41,8 +42,15 @@ class InvalidScoresError(RoomError):
     code = "invalid_scores"
 
 
+class TileOpError(RoomError):
+    code = "invalid_tile_op"
+
+
 class Player:
-    __slots__ = ("player_id", "name", "slot", "sid", "connected", "score", "ready", "clicked", "press_time", "is_bot")
+    __slots__ = (
+        "player_id", "name", "slot", "sid", "connected", "score", "ready", "is_bot",
+        "solved", "solve_time", "tiles", "tile_history", "next_tile_id",
+    )
 
     def __init__(self, player_id, name, slot, sid):
         self.player_id = player_id
@@ -52,9 +60,16 @@ class Player:
         self.connected = True
         self.score = 0.0
         self.ready = False
-        self.clicked = False
-        self.press_time = None
         self.is_bot = False
+
+        # Tile-solving state for the current round — each player gets their
+        # own independent copy of the round's 4 digits (same digits as
+        # everyone else, for a fair race) and solves at their own pace.
+        self.solved = False
+        self.solve_time = None
+        self.tiles = []          # [{"id": int, "value": float}, ...]
+        self.tile_history = []   # committed ops this round, oldest first
+        self.next_tile_id = 0
 
 
 class Room(GameState):
@@ -70,6 +85,7 @@ class Room(GameState):
         self.lock = threading.Lock()
         self.mode = "online"
         self.phase = "mode_select"
+        self.target = DEFAULT_TARGET
 
     def calculate_bot_delay_ms(self) -> float:
         """Calculate random delay between fastest_time_ms and slowest_time_ms.
@@ -152,8 +168,10 @@ class Room(GameState):
         for p in self.players.values():
             p.score = 0.0
             p.ready = False
-            p.clicked = False
-            p.press_time = None
+            p.solved = False
+            p.solve_time = None
+            p.tiles = []
+            p.tile_history = []
 
         self.round_number = 1
         self.round_history = []
@@ -179,8 +197,10 @@ class Room(GameState):
         self.round_history = []
         for p in self.players.values():
             p.ready = False
-            p.clicked = False
-            p.press_time = None
+            p.solved = False
+            p.solve_time = None
+            p.tiles = []
+            p.tile_history = []
 
     # --- game round logic ---
 
@@ -191,30 +211,134 @@ class Room(GameState):
         else:
             self.number = generate_4digit_number(self.difficulty)
 
+        digits = [int(ch) for ch in self.number if ch.isdigit()]
+
         for p in self.players.values():
-            p.clicked = False
-            p.press_time = None
+            p.solved = False
+            p.solve_time = None
+            # Every player gets their own independent copy of the same 4
+            # digits — a fair race, each solving on their own board.
+            p.tiles = [{"id": i, "value": float(d)} for i, d in enumerate(digits)]
+            p.tile_history = []
+            p.next_tile_id = len(digits)
 
         now = time.time()
         self.round_start_ts = now
         self.deadline_ts = now + 90.0
         self.round_started = True
 
-    def press_as_player(self, player_id):
+    def _find_player(self, player_id):
+        player = self.players.get(player_id)
+        if player is None:
+            raise PlayerNotFoundError("You're not in this room.")
+        return player
+
+    def _find_tile(self, player, tile_id):
+        return next((t for t in player.tiles if t["id"] == tile_id), None)
+
+    def _check_solved(self, player):
+        if len(player.tiles) == 1 and sandbox_math.is_within_tolerance(player.tiles[0]["value"], self.target):
+            player.solved = True
+            player.solve_time = time.time() - self.round_start_ts
+        self._maybe_finish()
+
+    def player_tile_commit(self, player_id, left_id, right_id, op):
+        if self.phase != "round":
+            return
+        player = self._find_player(player_id)
+        if player.solved or left_id == right_id:
+            return
+
+        left = self._find_tile(player, left_id)
+        right = self._find_tile(player, right_id)
+        if left is None or right is None:
+            raise TileOpError("That tile isn't available.")
+
+        try:
+            value = sandbox_math.apply_binary(op, left["value"], right["value"])
+        except sandbox_math.OpError as e:
+            raise TileOpError(str(e))
+
+        result = {"id": player.next_tile_id, "value": value}
+        player.next_tile_id += 1
+
+        left_index = next(i for i, t in enumerate(player.tiles) if t["id"] == left_id)
+        before = sum(1 for t in player.tiles[:left_index] if t["id"] != right_id)
+        remaining = [t for t in player.tiles if t["id"] not in (left_id, right_id)]
+        insert_at = min(before, len(remaining))
+        player.tiles = remaining[:insert_at] + [result] + remaining[insert_at:]
+
+        label = sandbox_math.format_binary_label(op, left["value"], right["value"], value)
+        player.tile_history.append({
+            "type": "binary", "op": op, "left": left, "right": right, "result": result, "label": label,
+        })
+
+        self.last_activity_ts = time.time()
+        self._check_solved(player)
+
+    def player_tile_unary(self, player_id, tile_id, op):
+        if self.phase != "round":
+            return
+        player = self._find_player(player_id)
+        if player.solved:
+            return
+
+        tile = self._find_tile(player, tile_id)
+        if tile is None:
+            raise TileOpError("That tile isn't available.")
+
+        try:
+            value = sandbox_math.apply_unary(op, tile["value"])
+        except sandbox_math.OpError as e:
+            raise TileOpError(str(e))
+
+        result = {"id": player.next_tile_id, "value": value}
+        player.next_tile_id += 1
+        player.tiles = [result if t["id"] == tile_id else t for t in player.tiles]
+
+        label = sandbox_math.format_unary_label(op, tile["value"], value)
+        player.tile_history.append({
+            "type": "unary", "op": op, "operand": tile, "result": result, "label": label,
+        })
+
+        self.last_activity_ts = time.time()
+        self._check_solved(player)
+
+    def player_tile_undo(self, player_id):
+        if self.phase != "round":
+            return
+        player = self._find_player(player_id)
+        if player.solved or not player.tile_history:
+            return
+
+        last = player.tile_history.pop()
+        result_id = last["result"]["id"]
+        idx = next((i for i, t in enumerate(player.tiles) if t["id"] == result_id), None)
+        if idx is None:
+            return
+        restored = [last["operand"]] if last["type"] == "unary" else [last["left"], last["right"]]
+        player.tiles = player.tiles[:idx] + restored + player.tiles[idx + 1:]
+        self.last_activity_ts = time.time()
+
+    def bot_auto_solve(self, player_id):
+        """Bots don't run the tile engine — they just get teleported to a
+        solved single tile after their delay, mirroring how they always
+        just faked a press rather than actually reacting to anything."""
         if self.phase != "round":
             return
         player = self.players.get(player_id)
-        if player is None or player.clicked:
+        if player is None or player.solved:
             return
-
-        player.clicked = True
-        player.press_time = time.time()
+        player.solved = True
+        player.solve_time = time.time() - self.round_start_ts
+        player.tiles = [{"id": player.next_tile_id, "value": float(self.target)}]
+        player.next_tile_id += 1
         self.last_activity_ts = time.time()
         self._maybe_finish()
 
     def _maybe_finish(self):
         connected_players = [p for p in self.players.values() if p.connected]
-        if connected_players and all(p.clicked for p in connected_players):
+        if connected_players and all(p.solved for p in connected_players):
             self._finish_round()
 
     def timeout(self):
@@ -232,8 +356,8 @@ class Room(GameState):
         sorted_players = sorted(self.players.values(), key=lambda p: p.slot)
 
         for p in sorted_players:
-            solved = p.clicked
-            solve_time = (p.press_time - self.round_start_ts) if solved and p.press_time else None
+            solved = p.solved
+            solve_time = p.solve_time if solved else None
             solve_times[p.player_id] = solve_time
             if solve_time is not None:
                 self.update_solve_time_stats(solve_time * 1000.0)
@@ -255,7 +379,7 @@ class Room(GameState):
                     "round_score": s.round_score,
                 }
 
-        solvers = sorted((p for p in sorted_players if p.clicked), key=lambda p: solve_times[p.player_id] or 999.0)
+        solvers = sorted((p for p in sorted_players if p.solved), key=lambda p: solve_times[p.player_id] or 999.0)
         if solvers:
             parts = [f"{p.name} +{score_by_pid[p.player_id].round_score:.0f}" for p in solvers]
             self.score_message = "SOLVED: " + ", ".join(parts)
@@ -318,7 +442,12 @@ class Room(GameState):
         p2 = sorted_players[1] if len(sorted_players) > 1 else None
         p3 = sorted_players[2] if len(sorted_players) > 2 else None
 
-        clicks_dict = {p.player_id: p.clicked for p in sorted_players}
+        # "clicks"/"clicked" are kept under their original names for
+        # backward compat with the shared GameStateDTO shape (local play
+        # still has real click semantics) — for online rooms they're now
+        # sourced from p.solved, since pressing a key was replaced by
+        # actually solving the tile puzzle.
+        clicks_dict = {p.player_id: p.solved for p in sorted_players}
         ready_dict = {p.player_id: p.ready for p in sorted_players}
 
         return {
@@ -329,6 +458,7 @@ class Room(GameState):
             "round_time": 90.0,
             "round_number": self.round_number,
             "rounds_per_game": ROUNDS_PER_GAME,
+            "target": self.target,
             "fastest_time_ms": self.fastest_time_ms,
             "slowest_time_ms": self.slowest_time_ms,
             "p1_name": p1.name if p1 else "",
@@ -358,7 +488,11 @@ class Room(GameState):
                     "connected": p.connected,
                     "is_host": p.player_id == self.host_player_id,
                     "ready": p.ready,
-                    "clicked": p.clicked,
+                    "clicked": p.solved,
+                    "solved": p.solved,
+                    "solve_time": p.solve_time,
+                    "tiles": p.tiles,
+                    "tile_history": p.tile_history,
                     "is_bot": p.is_bot,
                 }
                 for p in sorted_players

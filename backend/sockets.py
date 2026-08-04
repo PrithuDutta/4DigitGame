@@ -56,38 +56,38 @@ def _schedule_bot_actions_for_room(room):
     """Inspect room state and spawn non-blocking async background tasks for bot players."""
     with room.lock:
         phase = room.phase
-        bots_to_press = []
+        bots_to_solve = []
         bots_to_ready = []
 
         if phase == "round":
             for p in room.players.values():
-                if p.is_bot and not p.clicked:
+                if p.is_bot and not p.solved:
                     delay_ms = room.calculate_bot_delay_ms()
-                    bots_to_press.append((p.player_id, delay_ms / 1000.0))
+                    bots_to_solve.append((p.player_id, delay_ms / 1000.0))
         elif phase == "score":
             for p in room.players.values():
                 if p.is_bot and not p.ready:
                     bots_to_ready.append((p.player_id, 1.5))
 
-    for player_id, delay_sec in bots_to_press:
-        _schedule_bot_press(room, player_id, delay_sec)
+    for player_id, delay_sec in bots_to_solve:
+        _schedule_bot_solve(room, player_id, delay_sec)
 
     for player_id, delay_sec in bots_to_ready:
         _schedule_bot_ready(room, player_id, delay_sec)
 
 
-def _schedule_bot_press(room, player_id, delay_sec):
-    def bot_press_task():
+def _schedule_bot_solve(room, player_id, delay_sec):
+    def bot_solve_task():
         socketio.sleep(delay_sec)
         with room.lock:
             if room.phase == "round" and player_id in room.players:
                 p = room.players[player_id]
-                if p.is_bot and not p.clicked:
-                    room.press_as_player(player_id)
+                if p.is_bot and not p.solved:
+                    room.bot_auto_solve(player_id)
         _broadcast_room(room)
         _schedule_bot_actions_for_room(room)
 
-    socketio.start_background_task(bot_press_task)
+    socketio.start_background_task(bot_solve_task)
 
 
 def _schedule_bot_ready(room, player_id, delay_sec):
@@ -234,10 +234,22 @@ def handle_select_mode(room, player_id, data):
     room.select_mode(player_id, data.get("mode"))
 
 
-@socketio.on("press")
+@socketio.on("tile_commit")
 @_with_room
-def handle_press(room, player_id, data):
-    room.press_as_player(player_id)
+def handle_tile_commit(room, player_id, data):
+    room.player_tile_commit(player_id, data.get("left_id"), data.get("right_id"), data.get("op"))
+
+
+@socketio.on("tile_unary")
+@_with_room
+def handle_tile_unary(room, player_id, data):
+    room.player_tile_unary(player_id, data.get("tile_id"), data.get("op"))
+
+
+@socketio.on("tile_undo")
+@_with_room
+def handle_tile_undo(room, player_id, data):
+    room.player_tile_undo(player_id)
 
 
 @socketio.on("score_ready")

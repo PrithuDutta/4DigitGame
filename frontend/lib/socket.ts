@@ -7,6 +7,7 @@ import type {
   SessionDTO,
   SocketErrorDTO,
 } from "@/lib/types";
+import type { BinaryOpKind, UnaryOpKind } from "@/lib/sandboxMath";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:5000";
 
@@ -76,8 +77,16 @@ export function selectMode(mode: Mode) {
   getSocket().emit("select_mode", { mode });
 }
 
-export function press() {
-  getSocket().emit("press", {});
+export function tileCommit(leftId: number, rightId: number, op: BinaryOpKind) {
+  getSocket().emit("tile_commit", { left_id: leftId, right_id: rightId, op });
+}
+
+export function tileUnary(tileId: number, op: UnaryOpKind) {
+  getSocket().emit("tile_unary", { tile_id: tileId, op });
+}
+
+export function tileUndo() {
+  getSocket().emit("tile_undo", {});
 }
 
 export function scoreReady() {

@@ -1,23 +1,31 @@
 import type { GameStateDTO } from "@/lib/api";
+import type { RoomStateDTO } from "@/lib/types";
 
 interface Props {
-  state: GameStateDTO;
+  state: GameStateDTO | RoomStateDTO;
   onOpenAdmin: () => void;
   onChangeMode: () => void;
   onExit?: () => void;
   actionSlot?: React.ReactNode;
 }
 
+interface RowPlayer {
+  id: string;
+  name: string;
+  keyLabel: string | null;
+  ready: boolean;
+  total: number;
+}
+
 export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, actionSlot }: Props) {
   const isFinalRound = state.round_number >= state.rounds_per_game;
 
-  const isOnline = Array.isArray((state as any).players);
-  const rawPlayers = isOnline
-    ? (state as any).players.map((p: any) => ({
+  const rawPlayers: RowPlayer[] = "players" in state
+    ? state.players.map((p) => ({
         id: p.player_id || p.slot,
         name: p.name,
         keyLabel: null,
-        ready: Boolean(p.ready || state.ready[p.player_id]),
+        ready: Boolean(p.ready),
         total: p.score ?? 0,
       }))
     : [
@@ -116,7 +124,7 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, 
         </p>
 
         <div className="flex flex-wrap justify-center gap-2">
-          {rawPlayers.map((p: any) => (
+          {rawPlayers.map((p) => (
             <span
               key={p.id}
               className={`rounded px-2.5 py-1 text-xs font-bold font-mono border ${

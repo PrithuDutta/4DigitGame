@@ -399,13 +399,13 @@ export default function Sandbox({ onExit, multiplayer }: Props) {
 
       if (/^[0-9]$/.test(e.key) || e.key === "." || e.key === ",") {
         matchTypedDigit(e.key === "," ? "." : e.key);
-      } else if (e.key === "+" || e.key === "Add") {
+      } else if (e.key === "+" || e.key === "Add" || e.key === "p" || e.key === "P") {
         handleBinaryOpTap("+");
-      } else if (e.key === "-" || e.key === "Subtract") {
+      } else if (e.key === "-" || e.key === "Subtract" || e.key === "m" || e.key === "M") {
         handleBinaryOpTap("-");
       } else if (e.key === "*" || e.key === "Multiply" || e.key === "x" || e.key === "X") {
         handleBinaryOpTap("*");
-      } else if (e.key === "/" || e.key === "Divide") {
+      } else if (e.key === "/" || e.key === "Divide" || e.key === "d" || e.key === "D") {
         handleBinaryOpTap("/");
       } else if (e.key === "^") {
         handleBinaryOpTap("^");

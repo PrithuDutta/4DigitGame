@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import type { GameStateDTO } from "@/lib/api";
+import type { RoomStateDTO } from "@/lib/types";
 import { postAdminLogin, postAdminScores } from "@/lib/api";
 
 interface Props {
-  state: GameStateDTO;
+  state: GameStateDTO | RoomStateDTO;
   onClose: () => void;
   onScoresUpdated: (next: GameStateDTO) => void;
   onLogin?: (password: string) => Promise<{ ok: boolean }>;
-  onSubmitScores?: (p1: number, p2: number, p3: number) => Promise<GameStateDTO>;
+  onSubmitScores?: (
+    scores: Record<string, number> | number,
+    p2?: number,
+    p3?: number
+  ) => Promise<GameStateDTO>;
 }
 
 export default function AdminDialog({
@@ -23,9 +28,9 @@ export default function AdminDialog({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const isOnline = Array.isArray((state as any).players);
+  const isOnline = "players" in state;
   const initialScores: Record<string, string> = isOnline
-    ? (state as any).players.reduce((acc: Record<string, string>, p: any) => {
+    ? state.players.reduce<Record<string, string>>((acc, p) => {
         acc[p.player_id || p.slot] = (p.score ?? 0).toFixed(1);
         return acc;
       }, {})

@@ -52,21 +52,16 @@ export default function RoundScreen({ state, remainingSeconds, onExit, actionSlo
       ? "bg-amber-400"
       : "bg-indigo-500";
 
-  const isOnline = Array.isArray((state as any).players);
-  const playerItems = isOnline
-    ? (state as any).players.map((p: any) => ({
-        id: p.player_id || p.slot,
-        label: p.name,
-        keyBind: null,
-        active: Boolean(p.clicked || round.clicks[p.player_id]),
-      }))
-    : [
-        { id: "p1", label: state.p1_name, keyBind: "ENTER", active: round.clicks.enter },
-        { id: "p2", label: state.p2_name, keyBind: "SHIFT", active: round.clicks.shift },
-        ...(mode === "3p"
-          ? [{ id: "p3", label: state.p3_name, keyBind: "LMB", active: round.clicks.mouse }]
-          : []),
-      ];
+  // Local (single-device) play only now — the online round phase has its
+  // own MultiplayerRoundScreen/Sandbox-based UI, since solving a puzzle
+  // doesn't map onto a fixed ENTER/SHIFT/LMB slot per player.
+  const playerItems = [
+    { id: "p1", label: state.p1_name, keyBind: "ENTER", active: round.clicks.enter },
+    { id: "p2", label: state.p2_name, keyBind: "SHIFT", active: round.clicks.shift },
+    ...(mode === "3p"
+      ? [{ id: "p3", label: state.p3_name, keyBind: "LMB", active: round.clicks.mouse }]
+      : []),
+  ];
 
   return (
     <div className="flex flex-1 flex-col items-center px-4 pt-6 pb-8 max-w-xl mx-auto w-full">
@@ -110,24 +105,16 @@ export default function RoundScreen({ state, remainingSeconds, onExit, actionSlo
           </span>
         </div>
 
-        {/* Spacebar / Enter Prompt */}
+        {/* Spacebar Prompt */}
         <p className="mt-4 text-xs text-slate-400">
-          {isOnline ? (
-            <>
-              Press <span className="font-mono text-slate-200 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 font-bold">[ ENTER / SPACE ]</span> or click the button when solved
-            </>
-          ) : (
-            <>
-              Press <span className="font-mono text-slate-200 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 font-bold">[ SPACEBAR ]</span> for new number
-            </>
-          )}
+          Press <span className="font-mono text-slate-200 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 font-bold">[ SPACEBAR ]</span> for new number
         </p>
       </div>
 
       {/* Player Status Indicators */}
       <div className="mt-8 w-full max-w-md">
         <div className="flex flex-wrap justify-center gap-3">
-          {playerItems.map((item: any) => (
+          {playerItems.map((item) => (
             <KeyIndicator
               key={item.id}
               label={item.label}

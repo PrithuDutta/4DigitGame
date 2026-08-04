@@ -138,8 +138,17 @@ export interface SandboxPuzzleDTO {
   digits: number[];
 }
 
-export function postAdminScores(p1_score: number, p2_score: number, p3_score: number) {
-  return post<GameStateDTO>("/api/admin/scores", { p1_score, p2_score, p3_score });
+// Signature matches lib/socket.ts's adminScores (which does support a bulk
+// {playerId: score} record for online rooms) purely so AdminDialog can use
+// one prop type for both — local play's REST endpoint only has 3 fixed
+// slots, so the record branch here is unreachable in practice: AdminDialog
+// only ever builds a record when talking to an online room, which always
+// passes the online adminScores implementation instead of this one.
+export function postAdminScores(scores: Record<string, number> | number, p2_score = 0, p3_score = 0) {
+  if (typeof scores === "object") {
+    return post<GameStateDTO>("/api/admin/scores", { p1_score: 0, p2_score: 0, p3_score: 0 });
+  }
+  return post<GameStateDTO>("/api/admin/scores", { p1_score: scores, p2_score, p3_score });
 }
 
 export function getSandboxPuzzle() {

@@ -37,6 +37,28 @@ def load_valid_numbers_from_db():
 
 VALID_NUMBERS = load_valid_numbers_from_db()
 
+
+def load_target_from_db():
+    """Reads game_configs.target_num — already seeded by create_db.py, so
+    changing that one column (or adding per-room config later) is all it
+    takes to make the sandbox/multiplayer target configurable. Falls back to
+    the game's long-standing default of 10 if the DB isn't reachable."""
+    db_path = os.path.join(os.path.dirname(__file__), 'game.db')
+    if not os.path.exists(db_path):
+        return 10
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT target_num FROM game_configs LIMIT 1;")
+        row = cursor.fetchone()
+        conn.close()
+        return int(row[0]) if row and row[0] is not None else 10
+    except Exception as e:
+        print("Warning: Could not load target_num from game.db:", e)
+        return 10
+
+DEFAULT_TARGET = load_target_from_db()
+
 def generate_4digit_number(difficulty):
     if difficulty == "easy" and "easy" in VALID_NUMBERS and VALID_NUMBERS["easy"]:
         pool = VALID_NUMBERS["easy"]

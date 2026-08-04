@@ -13,50 +13,87 @@ import {
   isWithinTolerance,
 } from "@/lib/sandboxMath";
 
-const TARGET = 10;
+const DEFAULT_TARGET = 10;
 const BINARY_OPS: BinaryOpKind[] = ["+", "-", "*", "/", "^", "root"];
 const UNARY_OPS: UnaryOpKind[] = ["sqrt", "!"];
 const BUFFER_TIMEOUT_MS = 800;
 
-interface Tile {
+export interface Tile {
   id: number;
   value: number;
 }
 
-interface BinaryHistoryEntry {
+export interface BinaryHistoryEntry {
   type: "binary";
   operands: [Tile, Tile];
   result: Tile;
   label: string;
 }
 
-interface UnaryHistoryEntry {
+export interface UnaryHistoryEntry {
   type: "unary";
   operand: Tile;
   result: Tile;
   label: string;
 }
 
-type HistoryEntry = BinaryHistoryEntry | UnaryHistoryEntry;
+export type HistoryEntry = BinaryHistoryEntry | UnaryHistoryEntry;
 
-interface Props {
-  onExit: () => void;
+// When present, tiles/history/target are server-authoritative (props, not
+// local state) and every action is an emit — nothing is computed locally.
+// The server independently recomputes and validates every operation, so a
+// modified client can't fabricate a solve.
+export interface MultiplayerTileProps {
+  tiles: Tile[];
+  target: number;
+  history: HistoryEntry[];
+  solved: boolean;
+  error: string | null;
+  onCommit: (leftId: number, rightId: number, op: BinaryOpKind) => void;
+  onUnary: (tileId: number, op: UnaryOpKind) => void;
+  onUndo: () => void;
 }
 
-export default function Sandbox({ onExit }: Props) {
+interface Props {
+  onExit?: () => void;
+  multiplayer?: MultiplayerTileProps;
+}
+
+export default function Sandbox({ onExit, multiplayer }: Props) {
+  const isMultiplayer = !!multiplayer;
+
+  const [localTiles, setLocalTiles] = useState<Tile[]>([]);
+  const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [initialTiles, setInitialTiles] = useState<Tile[] | null>(null);
-  const [tiles, setTiles] = useState<Tile[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
   const [selectedTileIds, setSelectedTileIds] = useState<number[]>([]);
   const [activeOp, setActiveOp] = useState<BinaryOpKind | null>(null);
   const [typedBuffer, setTypedBuffer] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isMultiplayer);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const nextIdRef = useRef(0);
   const typedBufferRef = useRef("");
   const bufferTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const tiles = isMultiplayer ? multiplayer.tiles : localTiles;
+  const history = isMultiplayer ? multiplayer.history : localHistory;
+  const target = isMultiplayer ? multiplayer.target : DEFAULT_TARGET;
+  const error = isMultiplayer ? multiplayer.error : localError;
+  const locked = isMultiplayer && multiplayer.solved; // server has this player locked out
+  const isWon = isMultiplayer
+    ? multiplayer.solved
+    : tiles.length === 1 && isWithinTolerance(tiles[0].value, target);
+
+  const setError = useCallback(
+    (msg: string | null) => {
+      // In multiplayer, errors come from the server via multiplayer.error —
+      // there's nothing to set locally, the prop just flows through.
+      if (!isMultiplayer) setLocalError(msg);
+    },
+    [isMultiplayer]
+  );
 
   const clearTypedBuffer = useCallback(() => {
     if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
@@ -64,38 +101,74 @@ export default function Sandbox({ onExit }: Props) {
     setTypedBuffer("");
   }, []);
 
+  // Only ever mutates state inside a promise callback, never synchronously,
+  // so this is safe to call from an effect body (unlike setLoading/setLoadError,
+  // which are fine from event handlers but not from a mount effect).
+  const fetchPuzzleData = useCallback(
+    () =>
+      getSandboxPuzzle()
+        .then((data) => {
+          const fresh = data.digits.map((d, i) => ({ id: i, value: d }));
+          nextIdRef.current = fresh.length;
+          setInitialTiles(fresh);
+          setLocalTiles(fresh);
+          setLocalHistory([]);
+          setSelectedTileIds([]);
+          setActiveOp(null);
+          setLocalError(null);
+        })
+        .catch(() => setLoadError("Could not load a puzzle. Try again."))
+        .finally(() => setLoading(false)),
+    []
+  );
+
   const fetchPuzzle = useCallback(() => {
+    if (isMultiplayer) return;
     setLoading(true);
     setLoadError(null);
     clearTypedBuffer();
-    getSandboxPuzzle()
-      .then((data) => {
-        const fresh = data.digits.map((d, i) => ({ id: i, value: d }));
-        nextIdRef.current = fresh.length;
-        setInitialTiles(fresh);
-        setTiles(fresh);
-        setHistory([]);
-        setSelectedTileIds([]);
-        setActiveOp(null);
-        setError(null);
-      })
-      .catch(() => setLoadError("Could not load a puzzle. Try again."))
-      .finally(() => setLoading(false));
-  }, [clearTypedBuffer]);
+    fetchPuzzleData();
+  }, [isMultiplayer, clearTypedBuffer, fetchPuzzleData]);
 
   useEffect(() => {
-    fetchPuzzle();
-  }, [fetchPuzzle]);
+    if (!isMultiplayer) fetchPuzzleData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const isWon = tiles.length === 1 && isWithinTolerance(tiles[0].value, TARGET);
+  // Prune (not wipe) the local selection whenever the server hands back a
+  // fresh tiles prop — every room_state broadcast reaches every player, so
+  // this fires on other players' actions too, not just our own. Only drop
+  // ids that the server confirms are actually gone (a commit consumed them),
+  // so an in-progress selection survives an unrelated opponent update.
+  useEffect(() => {
+    if (!isMultiplayer) return;
+    const pruneStaleSelection = () => {
+      setSelectedTileIds((ids) => ids.filter((id) => tiles.some((t) => t.id === id)));
+    };
+    pruneStaleSelection();
+  }, [tiles, isMultiplayer]);
 
-  // Helper to execute a binary calculation between two tiles
+  useEffect(() => {
+    const clearArmedOpIfNothingSelected = () => {
+      if (isMultiplayer && selectedTileIds.length === 0) setActiveOp(null);
+    };
+    clearArmedOpIfNothingSelected();
+  }, [selectedTileIds, isMultiplayer]);
+
   const commitBinary = useCallback(
     (leftTile: Tile, rightTile: Tile, op: BinaryOpKind, currentTiles: Tile[]) => {
       clearTypedBuffer();
+
+      if (isMultiplayer) {
+        multiplayer.onCommit(leftTile.id, rightTile.id, op);
+        setSelectedTileIds([]);
+        setActiveOp(null);
+        return;
+      }
+
       const outcome = applyBinary(op, leftTile.value, rightTile.value);
       if (!outcome.ok) {
-        setError(outcome.error);
+        setLocalError(outcome.error);
         setSelectedTileIds([]);
         setActiveOp(null);
         return;
@@ -115,21 +188,20 @@ export default function Sandbox({ onExit }: Props) {
         ...withoutOperands.slice(insertAt),
       ];
 
-      setTiles(nextTiles);
-      setHistory((h) => [...h, { type: "binary", operands: [leftTile, rightTile], result, label }]);
+      setLocalTiles(nextTiles);
+      setLocalHistory((h) => [...h, { type: "binary", operands: [leftTile, rightTile], result, label }]);
       setSelectedTileIds([]);
       setActiveOp(null);
-      setError(null);
+      setLocalError(null);
     },
-    [clearTypedBuffer]
+    [isMultiplayer, multiplayer, clearTypedBuffer]
   );
 
-  // Tap handler for tiles
   const handleTileTap = useCallback(
     (tile: Tile) => {
+      if (locked) return;
       setError(null);
 
-      // Deselect if already selected
       if (selectedTileIds.includes(tile.id)) {
         setSelectedTileIds((ids) => ids.filter((id) => id !== tile.id));
         return;
@@ -137,7 +209,6 @@ export default function Sandbox({ onExit }: Props) {
 
       const nextSelectedIds = [...selectedTileIds, tile.id];
 
-      // If we now have 2 selected tiles AND an active binary operation -> AUTO-COMMIT IMMEDIATELY!
       if (nextSelectedIds.length === 2 && activeOp) {
         const left = tiles.find((t) => t.id === nextSelectedIds[0]);
         const right = tiles.find((t) => t.id === nextSelectedIds[1]);
@@ -153,10 +224,9 @@ export default function Sandbox({ onExit }: Props) {
         setSelectedTileIds(nextSelectedIds);
       }
     },
-    [selectedTileIds, activeOp, tiles, commitBinary]
+    [locked, selectedTileIds, activeOp, tiles, commitBinary, setError]
   );
 
-  // Commit any pending buffer if operator is pressed
   const flushPendingBuffer = useCallback(() => {
     if (typedBufferRef.current) {
       const currentBuf = typedBufferRef.current;
@@ -170,9 +240,9 @@ export default function Sandbox({ onExit }: Props) {
     }
   }, [tiles, selectedTileIds, handleTileTap, clearTypedBuffer]);
 
-  // Tap handler for binary operations (+, -, *, /, ^, root)
   const handleBinaryOpTap = useCallback(
     (kind: BinaryOpKind) => {
+      if (locked) return;
       flushPendingBuffer();
       setError(null);
 
@@ -192,12 +262,12 @@ export default function Sandbox({ onExit }: Props) {
 
       setActiveOp(kind);
     },
-    [activeOp, selectedTileIds, tiles, commitBinary, flushPendingBuffer]
+    [locked, activeOp, selectedTileIds, tiles, commitBinary, flushPendingBuffer, setError]
   );
 
-  // Tap handler for unary operations (x!, sqrt)
   const handleUnaryOpTap = useCallback(
     (kind: UnaryOpKind) => {
+      if (locked) return;
       flushPendingBuffer();
       setError(null);
 
@@ -210,52 +280,67 @@ export default function Sandbox({ onExit }: Props) {
       const tile = tiles.find((t) => t.id === targetId);
       if (!tile) return;
 
+      if (isMultiplayer) {
+        multiplayer.onUnary(tile.id, kind);
+        setSelectedTileIds([]);
+        setActiveOp(null);
+        return;
+      }
+
       const outcome = applyUnary(kind, tile.value);
       if (!outcome.ok) {
-        setError(outcome.error);
+        setLocalError(outcome.error);
         return;
       }
 
       const result: Tile = { id: nextIdRef.current++, value: outcome.value };
       const label = formatUnaryLabel(kind, tile.value, outcome.value);
 
-      setTiles((ts) => ts.map((t) => (t.id === tile.id ? result : t)));
-      setHistory((h) => [...h, { type: "unary", operand: tile, result, label }]);
+      setLocalTiles((ts) => ts.map((t) => (t.id === tile.id ? result : t)));
+      setLocalHistory((h) => [...h, { type: "unary", operand: tile, result, label }]);
       setSelectedTileIds([]);
       setActiveOp(null);
-      setError(null);
+      setLocalError(null);
     },
-    [selectedTileIds, tiles, flushPendingBuffer]
+    [locked, selectedTileIds, tiles, flushPendingBuffer, isMultiplayer, multiplayer, setError]
   );
 
   const handleUndo = useCallback(() => {
+    if (locked) return;
     clearTypedBuffer();
-    if (history.length === 0) return;
-    setError(null);
-    const last = history[history.length - 1];
-    const idx = tiles.findIndex((t) => t.id === last.result.id);
+    setSelectedTileIds([]);
+    setActiveOp(null);
+
+    if (isMultiplayer) {
+      multiplayer.onUndo();
+      return;
+    }
+
+    if (localHistory.length === 0) return;
+    setLocalError(null);
+    const last = localHistory[localHistory.length - 1];
+    const idx = localTiles.findIndex((t) => t.id === last.result.id);
     if (idx === -1) return;
-    const withoutResult = tiles.filter((t) => t.id !== last.result.id);
+    const withoutResult = localTiles.filter((t) => t.id !== last.result.id);
     const restored = last.type === "unary" ? [last.operand] : last.operands;
 
-    setTiles([...withoutResult.slice(0, idx), ...restored, ...withoutResult.slice(idx)]);
-    setHistory((h) => h.slice(0, -1));
-    setActiveOp(null);
-    setSelectedTileIds([]);
-  }, [history, tiles, clearTypedBuffer]);
+    setLocalTiles([...withoutResult.slice(0, idx), ...restored, ...withoutResult.slice(idx)]);
+    setLocalHistory((h) => h.slice(0, -1));
+  }, [locked, isMultiplayer, multiplayer, localHistory, localTiles, clearTypedBuffer]);
 
   const handleReset = useCallback(() => {
+    if (isMultiplayer) return; // no resets mid-race
     clearTypedBuffer();
     if (!initialTiles) return;
-    setError(null);
-    setTiles(initialTiles);
-    setHistory([]);
+    setLocalError(null);
+    setLocalTiles(initialTiles);
+    setLocalHistory([]);
     setActiveOp(null);
     setSelectedTileIds([]);
-  }, [initialTiles, clearTypedBuffer]);
+  }, [isMultiplayer, initialTiles, clearTypedBuffer]);
 
-  // Backspace deletes typed buffer or pops last selected tile
   const handleBackspace = useCallback(() => {
+    if (locked) return;
     setError(null);
     if (typedBufferRef.current) {
       clearTypedBuffer();
@@ -264,11 +349,11 @@ export default function Sandbox({ onExit }: Props) {
     } else if (activeOp !== null) {
       setActiveOp(null);
     }
-  }, [selectedTileIds, activeOp, clearTypedBuffer]);
+  }, [locked, selectedTileIds, activeOp, clearTypedBuffer, setError]);
 
-  // Precise digit matcher: holds buffer open if prefix for larger tiles (e.g. 3 vs 35)
   const matchTypedDigit = useCallback(
     (digitChar: string) => {
+      if (locked) return;
       setError(null);
       if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
 
@@ -284,12 +369,9 @@ export default function Sandbox({ onExit }: Props) {
       );
 
       if (exactMatch && !isPrefixOfOther) {
-        // Unambiguous exact match (e.g. typed "35" or typed "7" when no "7x" tiles exist)
         handleTileTap(exactMatch);
         clearTypedBuffer();
       } else if (isPrefixOfOther) {
-        // Ambiguous prefix (e.g. typed "3" when tile "35" exists)
-        // DO NOT select exactMatch yet! Wait for next digit or 800ms timeout.
         bufferTimerRef.current = setTimeout(() => {
           const pendingMatch = unselectedTiles.find(
             (t) => formatValue(t.value) === typedBufferRef.current
@@ -303,16 +385,14 @@ export default function Sandbox({ onExit }: Props) {
         handleTileTap(exactMatch);
         clearTypedBuffer();
       } else {
-        // Invalid sequence -> auto clear buffer
         bufferTimerRef.current = setTimeout(() => {
           clearTypedBuffer();
         }, BUFFER_TIMEOUT_MS);
       }
     },
-    [tiles, selectedTileIds, handleTileTap, clearTypedBuffer]
+    [locked, tiles, selectedTileIds, handleTileTap, clearTypedBuffer, setError]
   );
 
-  // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -337,9 +417,9 @@ export default function Sandbox({ onExit }: Props) {
         handleBackspace();
       } else if (e.key === "z" || e.key === "Z") {
         handleUndo();
-      } else if (e.key === "Escape" || e.key === "r" || e.key === "R") {
+      } else if (!isMultiplayer && (e.key === "Escape" || e.key === "r" || e.key === "R")) {
         handleReset();
-      } else if (e.key === "n" || e.key === "N") {
+      } else if (!isMultiplayer && (e.key === "n" || e.key === "N")) {
         fetchPuzzle();
       } else if (e.key === " " || e.key === "Enter") {
         flushPendingBuffer();
@@ -348,9 +428,18 @@ export default function Sandbox({ onExit }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [matchTypedDigit, handleBinaryOpTap, handleUnaryOpTap, handleBackspace, handleUndo, handleReset, fetchPuzzle, flushPendingBuffer]);
+  }, [
+    matchTypedDigit,
+    handleBinaryOpTap,
+    handleUnaryOpTap,
+    handleBackspace,
+    handleUndo,
+    handleReset,
+    fetchPuzzle,
+    flushPendingBuffer,
+    isMultiplayer,
+  ]);
 
-  // Staged formula preview string
   const renderFormulaPreview = () => {
     const firstTile = tiles.find((t) => t.id === selectedTileIds[0]);
     const secondTile = tiles.find((t) => t.id === selectedTileIds[1]);
@@ -358,7 +447,7 @@ export default function Sandbox({ onExit }: Props) {
     if (!firstTile && !activeOp) {
       return (
         <span className="text-slate-500 italic text-xs">
-          Tap or type numbers & operators to solve for {TARGET}
+          Tap or type numbers &amp; operators to solve for {target}
         </span>
       );
     }
@@ -388,7 +477,7 @@ export default function Sandbox({ onExit }: Props) {
     );
   };
 
-  if (loading) {
+  if (!isMultiplayer && loading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
         Loading puzzle...
@@ -396,14 +485,11 @@ export default function Sandbox({ onExit }: Props) {
     );
   }
 
-  if (loadError) {
+  if (!isMultiplayer && loadError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
         <p className="text-sm text-rose-400">{loadError}</p>
-        <button
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white"
-          onClick={fetchPuzzle}
-        >
+        <button className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white" onClick={fetchPuzzle}>
           Retry
         </button>
       </div>
@@ -412,107 +498,113 @@ export default function Sandbox({ onExit }: Props) {
 
   return (
     <div className="relative flex flex-1 flex-col items-center p-4 max-w-lg mx-auto w-full">
-      {/* Top Header */}
-      <div className="flex w-full items-center justify-between mb-4">
-        <button
-          onClick={onExit}
-          className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
-        >
-          ← Exit
-        </button>
+      {!isMultiplayer && (
+        <div className="flex w-full items-center justify-between mb-4">
+          <button
+            onClick={onExit}
+            className="rounded-lg border border-[#202738] bg-[#131722] px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
+          >
+            ← Exit
+          </button>
 
-        <p className="text-sm font-bold text-white">SOLO SANDBOX</p>
+          <p className="text-sm font-bold text-white">SOLO SANDBOX</p>
 
-        <div className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
-          TARGET: {TARGET}
+          <div className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+            TARGET: {target}
+          </div>
         </div>
-      </div>
+      )}
 
       {isWon && (
         <div className="w-full mb-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-center">
           <p className="font-mono text-sm font-bold text-emerald-300">
-            🎉 Solved! {formatValue(tiles[0].value)} = {TARGET}
+            🎉 Solved! {tiles.length === 1 ? formatValue(tiles[0].value) : formatValue(target)} = {target}
           </p>
+          {isMultiplayer && (
+            <p className="mt-1 text-xs text-emerald-200/80">Waiting for the other players to finish...</p>
+          )}
         </div>
       )}
 
-      {/* Formula Preview Bar & Typed Buffer Indicator */}
-      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2.5 px-4 mb-3 text-center min-h-[42px] flex items-center justify-between">
-        <div className="flex-1 flex justify-center">{renderFormulaPreview()}</div>
-        {typedBuffer && (
-          <span className="font-mono text-[10px] font-bold text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 animate-pulse">
-            Typed: &quot;{typedBuffer}&quot;
-          </span>
-        )}
-      </div>
-
-      {/* Digit Tiles Grid */}
-      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-4 mb-3 text-center">
-        <p className="mb-2.5 font-mono text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          TAP OR TYPE DIGIT TILES
-        </p>
-
-        <div className="flex flex-wrap justify-center gap-3">
-          {tiles.map((tile) => {
-            const selectedIdx = selectedTileIds.indexOf(tile.id);
-            const isSelected = selectedIdx !== -1;
-
-            return (
-              <button
-                key={tile.id}
-                onClick={() => handleTileTap(tile)}
-                className={`relative flex h-14 w-14 items-center justify-center rounded-xl font-mono text-lg font-bold border transition-all duration-150 active:scale-95 ${
-                  isSelected
-                    ? "border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
-                    : "border-slate-700 bg-slate-900 text-white hover:border-slate-500"
-                }`}
-              >
-                {formatValue(tile.value)}
-                {isSelected && (
-                  <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 font-mono text-[10px] font-bold text-slate-950">
-                    {selectedIdx + 1}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+      {!locked && (
+        <div className="w-full rounded-xl border border-[#202738] bg-[#131722] py-2.5 px-4 mb-3 text-center min-h-[42px] flex items-center justify-between">
+          <div className="flex-1 flex justify-center">{renderFormulaPreview()}</div>
+          {typedBuffer && (
+            <span className="font-mono text-[10px] font-bold text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 animate-pulse">
+              Typed: &quot;{typedBuffer}&quot;
+            </span>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Binary Operators Toolbar */}
-      <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-3.5 mb-3 text-center">
-        <div className="flex flex-wrap justify-center gap-2">
-          {BINARY_OPS.map((kind) => {
-            const isActive = activeOp === kind;
-            return (
+      {!locked && (
+        <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-4 mb-3 text-center">
+          <p className="mb-2.5 font-mono text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            TAP OR TYPE DIGIT TILES
+          </p>
+
+          <div className="flex flex-wrap justify-center gap-3">
+            {tiles.map((tile) => {
+              const selectedIdx = selectedTileIds.indexOf(tile.id);
+              const isSelected = selectedIdx !== -1;
+
+              return (
+                <button
+                  key={tile.id}
+                  onClick={() => handleTileTap(tile)}
+                  className={`relative flex h-14 w-14 items-center justify-center rounded-xl font-mono text-lg font-bold border transition-all duration-150 active:scale-95 ${
+                    isSelected
+                      ? "border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                      : "border-slate-700 bg-slate-900 text-white hover:border-slate-500"
+                  }`}
+                >
+                  {formatValue(tile.value)}
+                  {isSelected && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 font-mono text-[10px] font-bold text-slate-950">
+                      {selectedIdx + 1}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!locked && (
+        <div className="w-full rounded-xl border border-[#202738] bg-[#131722] p-3.5 mb-3 text-center">
+          <div className="flex flex-wrap justify-center gap-2">
+            {BINARY_OPS.map((kind) => {
+              const isActive = activeOp === kind;
+              return (
+                <button
+                  key={kind}
+                  onClick={() => handleBinaryOpTap(kind)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl font-mono text-sm font-bold border transition-all active:scale-95 ${
+                    isActive
+                      ? "border-indigo-400 bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.4)]"
+                      : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex justify-center gap-2 border-t border-[#202738] pt-3">
+            {UNARY_OPS.map((kind) => (
               <button
                 key={kind}
-                onClick={() => handleBinaryOpTap(kind)}
-                className={`flex h-10 w-10 items-center justify-center rounded-xl font-mono text-sm font-bold border transition-all active:scale-95 ${
-                  isActive
-                    ? "border-indigo-400 bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.4)]"
-                    : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
+                onClick={() => handleUnaryOpTap(kind)}
+                className="flex h-9 px-3.5 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 font-mono text-xs font-bold text-slate-300 hover:text-purple-300 hover:border-purple-500/40 transition-colors"
               >
-                {kind === "root" ? "ⁿ√" : binarySymbol(kind)}
+                {kind === "!" ? "x! (!)" : "√x (S)"}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
-
-        {/* Unary Operators Toolbar */}
-        <div className="mt-3 flex justify-center gap-2 border-t border-[#202738] pt-3">
-          {UNARY_OPS.map((kind) => (
-            <button
-              key={kind}
-              onClick={() => handleUnaryOpTap(kind)}
-              className="flex h-9 px-3.5 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 font-mono text-xs font-bold text-slate-300 hover:text-purple-300 hover:border-purple-500/40 transition-colors"
-            >
-              {kind === "!" ? "x! (!)" : "√x (S)"}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="w-full mb-3 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2 text-center text-xs font-semibold text-rose-300">
@@ -520,30 +612,34 @@ export default function Sandbox({ onExit }: Props) {
         </div>
       )}
 
-      {/* Action Controls */}
-      <div className="flex gap-2 mb-3 w-full max-w-sm justify-center">
-        <button
-          onClick={handleUndo}
-          disabled={history.length === 0}
-          className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 disabled:opacity-30 hover:text-white"
-        >
-          ↺ Undo (Z)
-        </button>
-        <button
-          onClick={handleReset}
-          className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 hover:text-white"
-        >
-          ⟲ Reset (R)
-        </button>
-        <button
-          onClick={fetchPuzzle}
-          className="flex-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2 font-mono text-xs font-bold text-indigo-300 hover:bg-indigo-500/20"
-        >
-          ✨ New (N)
-        </button>
-      </div>
+      {!locked && (
+        <div className="flex gap-2 mb-3 w-full max-w-sm justify-center">
+          <button
+            onClick={handleUndo}
+            disabled={history.length === 0}
+            className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 disabled:opacity-30 hover:text-white"
+          >
+            ↺ Undo (Z)
+          </button>
+          {!isMultiplayer && (
+            <>
+              <button
+                onClick={handleReset}
+                className="flex-1 rounded-lg border border-[#202738] bg-[#131722] py-2 font-mono text-xs font-bold text-slate-400 hover:text-white"
+              >
+                ⟲ Reset (R)
+              </button>
+              <button
+                onClick={fetchPuzzle}
+                className="flex-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2 font-mono text-xs font-bold text-indigo-300 hover:bg-indigo-500/20"
+              >
+                ✨ New (N)
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* Step History */}
       {history.length > 0 && (
         <div className="w-full max-w-sm rounded-xl border border-[#202738] bg-[#131722] p-3">
           <p className="mb-1 text-center font-mono text-[10px] font-bold text-slate-500 uppercase">

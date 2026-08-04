@@ -13,18 +13,21 @@ import {
   onError,
   onRoomState,
   onSession,
-  press,
   rejoinRoom,
   saveStoredSession,
   scoreReady,
   selectMode,
   startGame,
+  tileCommit,
+  tileUnary,
+  tileUndo,
   timeout as emitTimeout,
 } from "@/lib/socket";
 import type { GameStateDTO } from "@/lib/api";
+import type { BinaryOpKind, UnaryOpKind } from "@/lib/sandboxMath";
 import type { Mode, RoomStateDTO, SessionDTO } from "@/lib/types";
 import LobbyScreen from "./LobbyScreen";
-import RoundScreen from "./RoundScreen";
+import MultiplayerRoundScreen from "./MultiplayerRoundScreen";
 import ScoreScreen from "./ScoreScreen";
 import Podium from "./Podium";
 import AdminDialog from "./AdminDialog";
@@ -111,7 +114,9 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
     return () => clearInterval(id);
   }, [roomState?.phase, roomState?.round?.started, roomState?.round?.deadline_ts]);
 
-  // Enter/Space press the online "my own solve action" shortcut
+  // Enter/Space is the score-screen "ready up" shortcut. The round phase's
+  // keyboard handling (digit taps, operator keys, undo) lives entirely
+  // inside Sandbox's own listener now — solving isn't a single keypress.
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (adminOpenRef.current) return;
@@ -119,15 +124,14 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
 
       const s = roomStateRef.current;
-      if (!s) return;
+      if (!s || s.phase !== "score") return;
 
       const isEnterOrSpace =
         e.key === "Enter" || e.key === " " || e.code === "Space" || e.code === "Enter";
       if (!isEnterOrSpace) return;
 
       e.preventDefault();
-      if (s.phase === "score") scoreReady();
-      else if (s.phase === "round") press();
+      scoreReady();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -142,6 +146,21 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
     saveStoredSession(null);
     setSession(null);
     setRoomState(null);
+  }, []);
+
+  // Clear any stale tile-op error the moment the player tries something new
+  // — the server's next response (success or a fresh error) supersedes it.
+  const handleTileCommit = useCallback((leftId: number, rightId: number, op: BinaryOpKind) => {
+    setError(null);
+    tileCommit(leftId, rightId, op);
+  }, []);
+  const handleTileUnary = useCallback((tileId: number, op: UnaryOpKind) => {
+    setError(null);
+    tileUnary(tileId, op);
+  }, []);
+  const handleTileUndo = useCallback(() => {
+    setError(null);
+    tileUndo();
   }, []);
 
   const onlineLogin = useCallback((password: string) => {
@@ -183,7 +202,6 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
   }
 
   const myPlayer = session ? roomState.players.find((p) => p.player_id === session.player_id || p.slot === session.slot) : null;
-  const alreadyPressed = myPlayer?.clicked ?? (session ? Boolean(roomState.round.clicks[session.player_id]) : false);
   const alreadyReady = myPlayer?.ready ?? (session ? Boolean(roomState.ready[session.player_id]) : false);
 
   return (
@@ -207,11 +225,15 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
       )}
 
       {roomState.phase === "round" && (
-        <RoundScreen
+        <MultiplayerRoundScreen
           state={roomState}
+          me={myPlayer}
           remainingSeconds={remainingSeconds}
           onExit={handleLeaveRoom}
-          actionSlot={<PressButton label="PRESS!" onPress={press} disabled={alreadyPressed} />}
+          onCommit={handleTileCommit}
+          onUnary={handleTileUnary}
+          onUndo={handleTileUndo}
+          tileError={error}
         />
       )}
 

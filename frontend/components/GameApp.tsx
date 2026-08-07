@@ -30,7 +30,17 @@ export default function GameApp({ onBackToLanding }: Props) {
   const [state, setState] = useState<GameStateDTO | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [, setTick] = useState(0);
+
+  const deadline =
+    state?.phase === "round" && state.round.started && state.round.deadline_ts !== null
+      ? state.round.deadline_ts
+      : null;
+
+  const remainingSeconds = deadline
+    ? Math.max(0, Math.ceil(deadline - Date.now() / 1000))
+    : null;
+
   // Sandbox is single-player, frontend-only, and orthogonal to the backend's
   // multiplayer phase machine — it's a separate local view, not a phase.
   const [showSandbox, setShowSandbox] = useState(false);
@@ -78,27 +88,21 @@ export default function GameApp({ onBackToLanding }: Props) {
 
   // Drive the round countdown and fire the timeout once it elapses.
   useEffect(() => {
-    // No explicit reset when not in an active round: RoundScreen only ever
-    // displays remainingSeconds while state.round.started is true, so a
-    // stale value from a previous round is simply never shown.
-    if (!state || state.phase !== "round" || !state.round.started || state.round.deadline_ts === null) {
-      return;
-    }
-    const deadline = state.round.deadline_ts;
+    if (!deadline) return;
 
     const tick = () => {
       const remaining = deadline - Date.now() / 1000;
       if (remaining <= 0) {
         applyAction(() => postTimeout());
       } else {
-        setRemainingSeconds(Math.ceil(remaining));
+        setTick((t) => t + 1);
       }
     };
 
     tick();
     const id = setInterval(tick, 200);
     return () => clearInterval(id);
-  }, [state?.phase, state?.round.started, state?.round.deadline_ts, applyAction]);
+  }, [deadline, applyAction]);
 
   // Global ENTER / SHIFT / SPACE / mouse-click bindings, mirroring the desktop app.
   useEffect(() => {

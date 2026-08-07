@@ -7,6 +7,7 @@ modified client can't fabricate an instant solve.
 """
 
 import math
+from collections import deque
 
 EPSILON = 1e-9
 INTEGER_TOLERANCE = 1e-6
@@ -117,3 +118,62 @@ def format_unary_label(kind, a, result):
     if kind == "!":
         return f"{format_value(a)}! = {format_value(result)}"
     return f"√{format_value(a)} = {format_value(result)}"
+
+
+def solve_puzzle(digits, target=10):
+    """Finds a step-by-step tile history sequence (list of dicts) to reach target from digits.
+    Returns list of dicts with 'label' (matching tile_history shape) or None if unsolvable.
+    """
+    initial_tiles = tuple((float(d), ()) for d in digits)
+    queue = deque([initial_tiles])
+    visited = set()
+
+    binary_ops = ["+", "-", "*", "/", "^", "root"]
+    unary_ops = ["sqrt", "!"]
+
+    while queue:
+        tiles = queue.popleft()
+
+        if len(tiles) == 1 and is_within_tolerance(tiles[0][0], target):
+            return list(tiles[0][1])
+
+        state_key = tuple(sorted((round(t[0], 4), len(t[1])) for t in tiles))
+        if state_key in visited:
+            continue
+        visited.add(state_key)
+
+        for i, (val, hist) in enumerate(tiles):
+            for op in unary_ops:
+                try:
+                    res = apply_unary(op, val)
+                    label = format_unary_label(op, val, res)
+                    new_hist = hist + ({"type": "unary", "op": op, "label": label},)
+                    rem = tiles[:i] + ((res, new_hist),) + tiles[i + 1:]
+                    if len(rem) == 1 and is_within_tolerance(res, target):
+                        return list(new_hist)
+                    queue.append(rem)
+                except OpError:
+                    pass
+
+        n = len(tiles)
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                left_val, left_hist = tiles[i]
+                right_val, right_hist = tiles[j]
+                combined_hist = left_hist + right_hist
+
+                for op in binary_ops:
+                    try:
+                        res = apply_binary(op, left_val, right_val)
+                        label = format_binary_label(op, left_val, right_val, res)
+                        new_hist = combined_hist + ({"type": "binary", "op": op, "label": label},)
+                        rem = tuple(t for k, t in enumerate(tiles) if k != i and k != j) + ((res, new_hist),)
+                        if len(rem) == 1 and is_within_tolerance(res, target):
+                            return list(new_hist)
+                        queue.append(rem)
+                    except OpError:
+                        pass
+
+    return None

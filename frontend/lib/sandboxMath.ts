@@ -111,3 +111,81 @@ export function formatUnaryLabel(kind: UnaryOpKind, a: number, result: number): 
   if (kind === "!") return `${formatValue(a)}! = ${formatValue(result)}`;
   return `√${formatValue(a)} = ${formatValue(result)}`;
 }
+
+export function solvePuzzle(digits: number[], target = 10): string[] | null {
+  interface TileItem {
+    value: number;
+    steps: string[];
+  }
+
+  const initial: TileItem[] = digits.map((d) => ({ value: d, steps: [] }));
+  const queue: TileItem[][] = [initial];
+  const visited = new Set<string>();
+
+  const binaryOps: BinaryOpKind[] = ["+", "-", "*", "/", "^", "root"];
+  const unaryOps: UnaryOpKind[] = ["sqrt", "!"];
+
+  while (queue.length > 0) {
+    const tiles = queue.shift()!;
+
+    if (tiles.length === 1 && isWithinTolerance(tiles[0].value, target)) {
+      return tiles[0].steps;
+    }
+
+    const stateKey = tiles
+      .map((t) => `${Math.round(t.value * 10000) / 10000}:${t.steps.length}`)
+      .sort()
+      .join("|");
+
+    if (visited.has(stateKey)) continue;
+    visited.add(stateKey);
+
+    for (let i = 0; i < tiles.length; i++) {
+      for (const op of unaryOps) {
+        const outcome = applyUnary(op, tiles[i].value);
+        if (outcome.ok) {
+          const label = formatUnaryLabel(op, tiles[i].value, outcome.value);
+          const newSteps = [...tiles[i].steps, label];
+          const nextTiles = [
+            ...tiles.slice(0, i),
+            { value: outcome.value, steps: newSteps },
+            ...tiles.slice(i + 1),
+          ];
+          if (nextTiles.length === 1 && isWithinTolerance(outcome.value, target)) {
+            return newSteps;
+          }
+          queue.push(nextTiles);
+        }
+      }
+    }
+
+    const n = tiles.length;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const left = tiles[i];
+        const right = tiles[j];
+        const combinedSteps = [...left.steps, ...right.steps];
+
+        for (const op of binaryOps) {
+          const outcome = applyBinary(op, left.value, right.value);
+          if (outcome.ok) {
+            const label = formatBinaryLabel(op, left.value, right.value, outcome.value);
+            const newSteps = [...combinedSteps, label];
+            const nextTiles = [
+              ...tiles.filter((_, idx) => idx !== i && idx !== j),
+              { value: outcome.value, steps: newSteps },
+            ];
+            if (nextTiles.length === 1 && isWithinTolerance(outcome.value, target)) {
+              return newSteps;
+            }
+            queue.push(nextTiles);
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+

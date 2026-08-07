@@ -230,6 +230,7 @@ class GameState:
                 "speed_bonus": s.speed_bonus,
                 "rank_bonus": s.rank_bonus,
                 "round_score": s.round_score,
+                "solved": s.solve_bonus > 0,
             }
 
         solvers = sorted((s for s in scores if s.solve_bonus > 0), key=lambda s: -s.rank_bonus)

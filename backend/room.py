@@ -333,6 +333,12 @@ class Room(GameState):
         player.solve_time = time.time() - self.round_start_ts
         player.tiles = [{"id": player.next_tile_id, "value": float(self.target)}]
         player.next_tile_id += 1
+
+        digits = [int(ch) for ch in self.number if ch.isdigit()]
+        bot_history = sandbox_math.solve_puzzle(digits, self.target)
+        if bot_history:
+            player.tile_history = bot_history
+
         self.last_activity_ts = time.time()
         self._maybe_finish()
 
@@ -391,6 +397,8 @@ class Room(GameState):
                     "speed_bonus": s.speed_bonus,
                     "rank_bonus": s.rank_bonus,
                     "round_score": s.round_score,
+                    "solved": p.solved,
+                    "tile_history": list(p.tile_history) if p.tile_history else [],
                 }
 
         solvers = sorted((p for p in sorted_players if p.solved), key=lambda p: solve_times[p.player_id] or 999.0)

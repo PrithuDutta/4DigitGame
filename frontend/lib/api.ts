@@ -9,6 +9,8 @@ export interface RoundScoreDTO {
   speed_bonus: number;
   rank_bonus: number;
   round_score: number;
+  solved?: boolean;
+  tile_history?: { type: string; label: string; op?: string }[];
 }
 
 export interface StandingDTO {

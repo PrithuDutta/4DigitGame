@@ -1,5 +1,6 @@
 import type { GameStateDTO } from "@/lib/api";
 import type { RoomStateDTO } from "@/lib/types";
+import { solvePuzzle } from "@/lib/sandboxMath";
 
 interface Props {
   state: GameStateDTO | RoomStateDTO;
@@ -15,24 +16,81 @@ interface RowPlayer {
   keyLabel: string | null;
   ready: boolean;
   total: number;
+  solved: boolean;
+  solveTime: number | null;
+  steps: string[];
 }
 
 export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, actionSlot }: Props) {
   const isFinalRound = state.round_number >= state.rounds_per_game;
+  const target = "target" in state && state.target ? state.target : 10;
+
+  const lastDigits = (state.last_number || "")
+    .split("")
+    .filter((c) => /\d/.test(c))
+    .map(Number);
+  const sampleSteps = lastDigits.length === 4 ? solvePuzzle(lastDigits, target) : null;
 
   const rawPlayers: RowPlayer[] = "players" in state
-    ? state.players.map((p) => ({
-        id: p.player_id || p.slot,
-        name: p.name,
-        keyLabel: null,
-        ready: Boolean(p.ready),
-        total: p.score ?? 0,
-      }))
+    ? state.players.map((p) => {
+        const b = state.last_round_scores[p.player_id || p.slot];
+        const solved = p.solved ?? b?.solved ?? false;
+        const solveTime = p.solve_time ?? b?.solve_time ?? null;
+
+        let steps: string[] = [];
+        if (p.tile_history && p.tile_history.length > 0) {
+          steps = p.tile_history.map((h) => h.label);
+        } else if (b?.tile_history && b.tile_history.length > 0) {
+          steps = b.tile_history.map((h) => h.label);
+        } else if (solved && sampleSteps) {
+          steps = sampleSteps;
+        }
+
+        return {
+          id: p.player_id || p.slot,
+          name: p.name,
+          keyLabel: null,
+          ready: Boolean(p.ready),
+          total: p.score ?? 0,
+          solved,
+          solveTime,
+          steps,
+        };
+      })
     : [
-        { id: "p1", name: state.p1_name, keyLabel: "ENTER", ready: state.ready.enter, total: state.p1_score },
-        { id: "p2", name: state.p2_name, keyLabel: "SHIFT", ready: state.ready.shift, total: state.p2_score },
+        {
+          id: "p1",
+          name: state.p1_name,
+          keyLabel: "ENTER",
+          ready: state.ready.enter,
+          total: state.p1_score,
+          solved: Boolean(state.last_round_scores["p1"]?.solved || state.round.clicks.enter),
+          solveTime: state.last_round_scores["p1"]?.solve_time ?? null,
+          steps: (state.last_round_scores["p1"]?.solved || state.round.clicks.enter) && sampleSteps ? sampleSteps : [],
+        },
+        {
+          id: "p2",
+          name: state.p2_name,
+          keyLabel: "SHIFT",
+          ready: state.ready.shift,
+          total: state.p2_score,
+          solved: Boolean(state.last_round_scores["p2"]?.solved || state.round.clicks.shift),
+          solveTime: state.last_round_scores["p2"]?.solve_time ?? null,
+          steps: (state.last_round_scores["p2"]?.solved || state.round.clicks.shift) && sampleSteps ? sampleSteps : [],
+        },
         ...(state.mode === "3p"
-          ? [{ id: "p3", name: state.p3_name, keyLabel: "LMB", ready: state.ready.mouse, total: state.p3_score }]
+          ? [
+              {
+                id: "p3",
+                name: state.p3_name,
+                keyLabel: "LMB",
+                ready: state.ready.mouse,
+                total: state.p3_score,
+                solved: Boolean(state.last_round_scores["p3"]?.solved || state.round.clicks.mouse),
+                solveTime: state.last_round_scores["p3"]?.solve_time ?? null,
+                steps: (state.last_round_scores["p3"]?.solved || state.round.clicks.mouse) && sampleSteps ? sampleSteps : [],
+              },
+            ]
           : []),
       ];
 
@@ -111,6 +169,62 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, 
                     </div>
                   </div>
                 )}
+
+                {/* Solution breakdown row */}
+                <div className="mt-2 pt-2 border-t border-[#202738]">
+                  <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                    <div className="flex items-center gap-1">
+                      {player.solved ? (
+                        <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                          🎯 Solution to {target}:
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          ❌ Did not reach {target}
+                        </span>
+                      )}
+                    </div>
+
+                    {player.solved && player.solveTime !== null && (
+                      <span className="font-mono text-[10px] text-slate-400">
+                        ⏱ {player.solveTime.toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+
+                  {player.solved ? (
+                    <div className="flex flex-wrap items-center gap-1 font-mono text-[11px]">
+                      {player.steps.length > 0 ? (
+                        player.steps.map((step, idx) => (
+                          <div key={idx} className="flex items-center gap-1">
+                            {idx > 0 && <span className="text-slate-600 font-bold text-[10px]">➔</span>}
+                            <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-emerald-300 font-bold">
+                              {step}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Solved!</span>
+                      )}
+                    </div>
+                  ) : (
+                    sampleSteps && sampleSteps.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 font-mono text-[10px] text-slate-500 mt-0.5">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mr-0.5">
+                          Sample:
+                        </span>
+                        {sampleSteps.map((step, idx) => (
+                          <div key={idx} className="flex items-center gap-1">
+                            {idx > 0 && <span className="text-slate-700">➔</span>}
+                            <span className="rounded bg-slate-900 border border-slate-800 px-1.5 py-0.5 text-slate-400">
+                              {step}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             );
           })}
@@ -167,3 +281,4 @@ export default function ScoreScreen({ state, onOpenAdmin, onChangeMode, onExit, 
     </div>
   );
 }
+

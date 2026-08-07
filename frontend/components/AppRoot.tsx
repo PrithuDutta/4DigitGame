@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { loadStoredSession } from "@/lib/socket";
 import { hasSeenTutorial, markTutorialSeen } from "@/lib/tutorial";
+import { useVisitorTracking } from "@/lib/useVisitorTracking";
 import GameApp from "./GameApp";
 import LandingScreen from "./LandingScreen";
 import OnlineGameApp from "./OnlineGameApp";
@@ -33,6 +34,8 @@ function getSeenTutorialServer() {
 }
 
 export default function AppRoot() {
+  useVisitorTracking();
+
   const hasStoredSession = useSyncExternalStore(
     subscribeToStorage,
     getHasStoredSession,

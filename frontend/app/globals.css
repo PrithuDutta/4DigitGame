@@ -57,3 +57,29 @@ body {
   font-family: var(--font-mono);
   box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.4);
 }
+
+/* High Contrast Mode */
+html.high-contrast {
+  --bg-dark: #000000;
+  --bg-card: #0a0a10;
+  --bg-card-hover: #141420;
+  --border-card: #475569;
+  --text-main: #ffffff;
+  --text-muted: #cbd5e1;
+  --text-dim: #94a3b8;
+}
+
+html.high-contrast .clean-card,
+html.high-contrast .clean-card-interactive {
+  border-width: 2px;
+}
+
+/* Reduced Motion Mode */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+

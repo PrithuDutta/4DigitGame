@@ -4,9 +4,11 @@ import { useState, useSyncExternalStore } from "react";
 import { loadStoredSession } from "@/lib/socket";
 import { hasSeenTutorial, markTutorialSeen } from "@/lib/tutorial";
 import { useVisitorTracking } from "@/lib/useVisitorTracking";
+import { useSettings } from "@/lib/useSettings";
 import GameApp from "./GameApp";
 import LandingScreen from "./LandingScreen";
 import OnlineGameApp from "./OnlineGameApp";
+import SettingsDialog from "./SettingsDialog";
 import Tutorial from "./Tutorial";
 
 type Choice = "landing" | "local" | "online";
@@ -35,6 +37,7 @@ function getSeenTutorialServer() {
 
 export default function AppRoot() {
   useVisitorTracking();
+  useSettings(); // Initialize DOM scaling and options
 
   const hasStoredSession = useSyncExternalStore(
     subscribeToStorage,
@@ -45,6 +48,8 @@ export default function AppRoot() {
 
   const [explicitChoice, setExplicitChoice] = useState<Choice | null>(null);
   const [tutorialOverride, setTutorialOverride] = useState<boolean | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const choice: Choice = explicitChoice ?? (hasStoredSession ? "online" : "landing");
   const showTutorial = tutorialOverride ?? (!seenTutorialOnLoad && choice === "landing");
 
@@ -61,12 +66,20 @@ export default function AppRoot() {
   } else if (showTutorial) {
     content = <Tutorial onDone={finishTutorial} />;
   } else {
-    content = <LandingScreen onSelect={setExplicitChoice} onReplayTutorial={() => setTutorialOverride(true)} />;
+    content = (
+      <LandingScreen
+        onSelect={setExplicitChoice}
+        onReplayTutorial={() => setTutorialOverride(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
+    );
   }
 
   return (
     <div className="relative flex min-h-screen w-full flex-col bg-[var(--bg-dark)] text-[var(--text-main)]">
       <div className="relative z-10 flex flex-1 flex-col">{content}</div>
+      <SettingsDialog isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }
+

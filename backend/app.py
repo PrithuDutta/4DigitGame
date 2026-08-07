@@ -14,10 +14,12 @@ from config import (
 )
 from extensions import socketio
 from game_state import GameState, generate_4digit_number
+from metrics import metrics_bp
 from scoring import ROUND_TIME_LIMIT
 
 app = Flask(__name__)
 CORS(app, origins=FRONTEND_ORIGINS)
+app.register_blueprint(metrics_bp)
 socketio.init_app(app)
 
 import sockets  # noqa: E402 — side-effect import, registers @socketio.on handlers

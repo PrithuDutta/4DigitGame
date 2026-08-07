@@ -43,7 +43,18 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
   const [roomState, setRoomState] = useState<RoomStateDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [, setTick] = useState(0);
+
+  const deadline =
+    roomState?.phase === "countdown"
+      ? roomState.round?.deadline_ts
+      : roomState?.phase === "round" && roomState.round?.started
+      ? roomState.round?.deadline_ts
+      : null;
+
+  const remainingSeconds = deadline
+    ? Math.max(0, Math.ceil(deadline - Date.now() / 1000))
+    : null;
 
   const roomStateRef = useRef<RoomStateDTO | null>(null);
   const adminOpenRef = useRef(false);
@@ -92,27 +103,21 @@ export default function OnlineGameApp({ onBackToLanding }: Props) {
 
   // Drive the countdown timer for both countdown and round phases
   useEffect(() => {
-    if (!roomState) return;
-
-    const deadline =
-      roomState.phase === "countdown"
-        ? roomState.round?.deadline_ts
-        : roomState.phase === "round" && roomState.round?.started
-        ? roomState.round?.deadline_ts
-        : null;
-
     if (!deadline) return;
 
-    const id = setInterval(() => {
+    const tick = () => {
       const remaining = deadline - Date.now() / 1000;
       if (remaining <= 0) {
         emitTimeout();
       } else {
-        setRemainingSeconds(Math.ceil(remaining));
+        setTick((t) => t + 1);
       }
-    }, 200);
+    };
+
+    tick();
+    const id = setInterval(tick, 200);
     return () => clearInterval(id);
-  }, [roomState?.phase, roomState?.round?.started, roomState?.round?.deadline_ts]);
+  }, [deadline]);
 
   // Enter/Space is the score-screen "ready up" shortcut. The round phase's
   // keyboard handling (digit taps, operator keys, undo) lives entirely

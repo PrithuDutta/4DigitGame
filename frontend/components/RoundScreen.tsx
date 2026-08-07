@@ -43,12 +43,13 @@ function KeyIndicator({
 export default function RoundScreen({ state, remainingSeconds, onExit, actionSlot }: Props) {
   const { round, mode } = state;
   const isStarted = state.round.started && remainingSeconds !== null;
-  const timerPercent = remainingSeconds !== null ? Math.max(0, Math.min(100, (remainingSeconds / 10) * 100)) : 100;
+  const totalTime = state.round_time || 90;
+  const timerPercent = remainingSeconds !== null ? Math.max(0, Math.min(100, (remainingSeconds / totalTime) * 100)) : 100;
 
   const timerColor =
-    remainingSeconds !== null && remainingSeconds <= 3
+    remainingSeconds !== null && remainingSeconds <= 10
       ? "bg-rose-500"
-      : remainingSeconds !== null && remainingSeconds <= 5
+      : remainingSeconds !== null && remainingSeconds <= 30
       ? "bg-amber-400"
       : "bg-indigo-500";
 
